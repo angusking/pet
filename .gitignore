@@ -1,0 +1,19 @@
+# Java
+target/
+*.log
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker data
+mysql_data/
+redis_data/
