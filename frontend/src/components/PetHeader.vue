@@ -1,43 +1,144 @@
-﻿<template>
-  <header class="pet-hero">
-    <div class="pet-card">
-      <div class="pet-main">
-        <a class="avatar" href="#pet-home" aria-label="进入宠物主页">
-          <span class="avatar-ring"></span>
-          <img class="avatar-img" src="/assets/images/avatar.jpg" alt="宠物头像" />
-        </a>
-        <div class="pet-meta">
-          <div class="pet-title">
-            <h1>团子</h1>
-            <span class="pet-breed">金毛 · 母 · 已绝育</span>
-          </div>
-          <div class="pet-sub">2岁3月 · 生日 2023-11-12</div>
-          <div class="tag-row">
-            <span class="tag">已驱虫</span>
-            <span class="tag">已疫苗</span>
-            <span class="tag warn">过敏体质</span>
-            <span class="tag ok">体重 22.4kg</span>
-          </div>
-        </div>
-        <button class="ghost-btn">编辑宠物资料</button>
+<template>
+  <header ref="headerRef" class="home-header">
+    <div class="header-top">
+      <button class="pet-switch" type="button" @click="toggleDrawer">
+        <img class="pet-switch-avatar" :src="currentAvatar" alt="宠物头像" />
+        <span class="pet-switch-arrow" :class="{ open: drawerOpen }">▼</span>
+      </button>
+
+      <div class="feed-tabs" role="tablist" aria-label="信息流切换">
+        <button
+          type="button"
+          class="feed-tab"
+          :class="{ active: feedType === 'follow' }"
+          @click="changeFeed('follow')"
+        >
+          关注
+        </button>
+        <button
+          type="button"
+          class="feed-tab"
+          :class="{ active: feedType === 'discover' }"
+          @click="changeFeed('discover')"
+        >
+          发现
+        </button>
       </div>
 
-      <div class="status-card">
-        <div class="status-title">今日状态</div>
-        <div class="status-line">喂食 2 次 · 喝水 3 次 · 排便 1 次</div>
-      </div>
-
-      <div class="album">
-        <div class="album-head">
-          <div>宠物相册</div>
-          <a class="link" href="#album">查看全部</a>
-        </div>
-        <div class="album-grid">
-          <a href="#album"><img src="/assets/images/album-1.jpg" alt="相册1" /></a>
-          <a href="#album"><img src="/assets/images/album-2.jpg" alt="相册2" /></a>
-          <a href="#album"><img src="/assets/images/album-3.jpg" alt="相册3" /></a>
-        </div>
-      </div>
+      <button class="publish-btn" type="button" @click="$emit('publish')">发布</button>
     </div>
+
+    <div v-if="currentPet" class="current-pet">
+      <div class="name">{{ currentPet.name || "未命名" }}</div>
+      <div class="meta">{{ petMeta(currentPet) }}</div>
+    </div>
+    <div v-else class="current-pet empty">还没有宠物，先添加一只吧</div>
+
+    <transition name="pet-popover-transition">
+      <section v-if="drawerOpen" class="pet-popover">
+        <div class="drawer-head">
+          <h3>切换宠物</h3>
+          <button type="button" class="close-btn" @click="closeDrawer">关闭</button>
+        </div>
+
+        <div v-if="pets.length" class="pet-list">
+          <button
+            v-for="item in pets"
+            :key="item.id"
+            type="button"
+            class="pet-item"
+            :class="{ active: item.id === currentPetId }"
+            @click="onSelectPet(item)"
+          >
+            <img class="pet-item-avatar" :src="item.avatarUrl || '/assets/images/avatar.jpg'" alt="宠物头像" />
+            <div class="pet-item-main">
+              <div class="pet-item-name">{{ item.name || "未命名" }}</div>
+              <div class="pet-item-sub">{{ petLine(item) }}</div>
+              <div class="pet-item-tags">
+                <span class="state-tag">{{ item.tags?.[0] || "健康正常" }}</span>
+                <span v-if="item.id === currentPetId" class="current-tag">当前宠物</span>
+              </div>
+            </div>
+          </button>
+        </div>
+        <div v-else class="empty-pets">
+          <p>你还没有添加宠物，先创建一只宠物档案。</p>
+        </div>
+
+        <button class="add-pet-btn" type="button" @click="$emit('add-pet')">添加宠物</button>
+      </section>
+    </transition>
   </header>
 </template>
+
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+
+const props = defineProps({
+  currentPet: {
+    type: Object,
+    default: null,
+  },
+  pets: {
+    type: Array,
+    default: () => [],
+  },
+  feedType: {
+    type: String,
+    default: "discover",
+  },
+});
+
+const emit = defineEmits(["change-feed", "select-pet", "add-pet", "publish"]);
+const drawerOpen = ref(false);
+const headerRef = ref(null);
+
+const currentAvatar = computed(() => props.currentPet?.avatarUrl || "/assets/images/avatar.jpg");
+const currentPetId = computed(() => props.currentPet?.id ?? null);
+
+const petMeta = (pet) => {
+  const genderMap = { 1: "公", 2: "母" };
+  const gender = genderMap[pet.gender] || "未知";
+  const breed = pet.breed || "未知品种";
+  return `${breed} · ${gender}`;
+};
+
+const petLine = (pet) => {
+  const breed = pet.breed || "未知品种";
+  const weight = pet.weightKg != null ? `${pet.weightKg}kg` : "--kg";
+  return `${breed} · ${weight}`;
+};
+
+const toggleDrawer = () => {
+  drawerOpen.value = !drawerOpen.value;
+};
+
+const closeDrawer = () => {
+  drawerOpen.value = false;
+};
+
+const changeFeed = (type) => {
+  emit("change-feed", type);
+};
+
+const onSelectPet = (pet) => {
+  emit("select-pet", pet);
+  closeDrawer();
+};
+
+const onWindowClick = (event) => {
+  if (!drawerOpen.value) return;
+  if (!headerRef.value) return;
+  if (!headerRef.value.contains(event.target)) {
+    closeDrawer();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener("click", onWindowClick);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("click", onWindowClick);
+});
+</script>

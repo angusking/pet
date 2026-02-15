@@ -1,0 +1,117 @@
+宠物社区系统 - 数据库表结构与说明（MVP阶段）
+
+数据库：MySQL 8.x 适配框架：Spring Boot + JPA + Flyway
+目标：支撑社区内容、宠物信息、广告投放、AI宠物助手等核心功能。
+
+==================================== 一、用户表 users
+==================================== 作用：
+存储系统用户信息，用于登录认证、发帖、调用AI助手等。
+
+字段说明： - id：主键ID - username：登录账号（唯一） -
+password_hash：加密后的密码 - nickname：昵称 - avatar_url：头像地址 -
+role：角色（USER / ADMIN） - status：状态（ACTIVE / DISABLED） -
+created_at：创建时间 - updated_at：更新时间
+
+建表SQL： CREATE TABLE users ( id BIGINT PRIMARY KEY AUTO_INCREMENT,
+username VARCHAR(50) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT
+NULL, nickname VARCHAR(50), avatar_url VARCHAR(512), role VARCHAR(20)
+DEFAULT ‘USER’, status VARCHAR(20) DEFAULT ‘ACTIVE’, created_at DATETIME
+DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+ON UPDATE CURRENT_TIMESTAMP );
+
+==================================== 二、宠物表 pets
+==================================== 作用：
+存储用户的宠物资料，用于首页宠物卡展示及AI诊断个性化。
+
+字段说明： - id：宠物ID - user_id：所属用户 - name：宠物名称 -
+breed：品种 - gender：性别 - birthday：生日 - weight_kg：体重 -
+avatar_url：头像 - tags_json：宠物标签(JSON字符串存TEXT) -
+is_primary：是否默认宠物 - created_at / updated_at：时间字段
+
+建表SQL： CREATE TABLE pets ( id BIGINT PRIMARY KEY AUTO_INCREMENT,
+user_id BIGINT NOT NULL, name VARCHAR(50) NOT NULL, breed VARCHAR(50),
+gender TINYINT DEFAULT 0, birthday DATE, weight_kg DECIMAL(5,2),
+avatar_url VARCHAR(512), tags_json TEXT, is_primary TINYINT(1) DEFAULT
+0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME
+DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_pets_user (user_id),
+    INDEX idx_pets_primary (user_id, is_primary)
+
+);
+
+==================================== 三、帖子表 posts
+==================================== 作用： 存储社区用户发布的动态内容。
+
+字段说明： - id：帖子ID - user_id：作者 - pet_id：关联宠物 -
+content：帖子正文 - city：城市信息 - status：发布状态 -
+like_count：点赞数 - comment_count：评论数 - created_at /
+updated_at：时间字段
+
+建表SQL： CREATE TABLE posts ( id BIGINT PRIMARY KEY AUTO_INCREMENT,
+user_id BIGINT NOT NULL, pet_id BIGINT, content TEXT NOT NULL, city
+VARCHAR(50), status VARCHAR(20) DEFAULT ‘PUBLISHED’, like_count INT
+DEFAULT 0, comment_count INT DEFAULT 0, created_at DATETIME DEFAULT
+CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON
+UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_posts_created (created_at),
+    INDEX idx_posts_user_created (user_id, created_at),
+    INDEX idx_posts_pet_created (pet_id, created_at)
+
+);
+
+==================================== 四、帖子媒体表 post_media
+==================================== 作用：
+存储帖子关联的图片或视频资源。
+
+字段说明： - id：主键 - post_id：帖子ID - media_type：媒体类型 -
+url：资源地址 - sort_order：排序顺序 - created_at：创建时间
+
+建表SQL： CREATE TABLE post_media ( id BIGINT PRIMARY KEY
+AUTO_INCREMENT, post_id BIGINT NOT NULL, media_type VARCHAR(20) DEFAULT
+‘IMAGE’, url VARCHAR(1024) NOT NULL, sort_order INT DEFAULT 0,
+created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_media_post_sort (post_id, sort_order)
+
+);
+
+==================================== 五、广告表 ads
+==================================== 作用：
+用于在信息流中插入商业推广内容。
+
+字段说明： - id：广告ID - ad_type：广告类型 - title：标题 -
+cover_url：封面图 - description：描述 - cta_text：按钮文字 -
+landing_url：跳转链接 - weight：投放权重 - enabled：是否启用 - start_at
+/ end_at：投放时间窗口 - created_at / updated_at：时间字段
+
+建表SQL： CREATE TABLE ads ( id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ad_type VARCHAR(20) NOT NULL, title VARCHAR(100) NOT NULL, cover_url
+VARCHAR(1024), description VARCHAR(255), cta_text VARCHAR(20),
+landing_url VARCHAR(1024), weight INT DEFAULT 100, enabled TINYINT(1)
+DEFAULT 1, start_at DATETIME, end_at DATETIME, created_at DATETIME
+DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_ads_enabled_weight (enabled, weight),
+    INDEX idx_ads_type_enabled (ad_type, enabled)
+
+);
+
+==================================== 六、AI对话记录表 ai_chat_messages
+==================================== 作用： 存储AI宠物助手对话历史。
+
+字段说明： - id：主键 - user_id：用户ID - pet_id：关联宠物 -
+role：消息角色(USER/ASSISTANT) - content：对话内容 - model：使用模型 -
+tokens：消耗Token - created_at：创建时间
+
+建表SQL： CREATE TABLE ai_chat_messages ( id BIGINT PRIMARY KEY
+AUTO_INCREMENT, user_id BIGINT NOT NULL, pet_id BIGINT, role VARCHAR(20)
+NOT NULL, content TEXT NOT NULL, model VARCHAR(50), tokens INT,
+created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_ai_user_created (user_id, created_at),
+    INDEX idx_ai_pet_created (pet_id, created_at)
+
+);

@@ -1,7 +1,7 @@
 ﻿<template>
   <main class="feed">
     <div class="feed-head">
-      <div class="feed-title">社区动态</div>
+      <div class="feed-title">{{ feedTitle }}</div>
       <div class="feed-actions">
         <button class="pill">下拉刷新</button>
         <button class="pill">上拉加载更多</button>
@@ -253,4 +253,17 @@
     </section>
   </main>
 </template>
+
+<script setup>
+import { computed } from "vue";
+
+const props = defineProps({
+  feedType: {
+    type: String,
+    default: "discover",
+  },
+});
+
+const feedTitle = computed(() => (props.feedType === "follow" ? "关注动态" : "发现动态"));
+</script>
 

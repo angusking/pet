@@ -4,6 +4,7 @@ services:
   mysql:
     image: mysql:8.4
     container_name: pet-mysql
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     environment:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: pet_demo
