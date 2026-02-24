@@ -11,9 +11,14 @@
       @publish="goPublish"
     />
 
-    <FeedSection :feed-type="feedType" />
+    <FeedSection
+      :feed-type="feedType"
+      :posts="posts"
+      :loading="loadingPosts"
+      :error="postError"
+      @refresh="loadPosts"
+    />
     <BackTop />
-    <TabBar />
   </div>
 </template>
 
@@ -23,7 +28,6 @@ import { useRouter } from "vue-router";
 import PetHeader from "../components/PetHeader.vue";
 import FeedSection from "../components/FeedSection.vue";
 import BackTop from "../components/BackTop.vue";
-import TabBar from "../components/TabBar.vue";
 import { api } from "../utils/api";
 import { clearToken } from "../utils/auth";
 
@@ -31,9 +35,13 @@ const router = useRouter();
 const currentPet = ref(null);
 const pets = ref([]);
 const feedType = ref("discover");
+const posts = ref([]);
+const loadingPosts = ref(false);
+const postError = ref("");
 
 onMounted(async () => {
   await loadHeaderData();
+  await loadPosts();
 });
 
 const loadHeaderData = async () => {
@@ -51,6 +59,7 @@ const loadHeaderData = async () => {
 
 const onChangeFeed = (type) => {
   feedType.value = type;
+  loadPosts();
 };
 
 const onSelectPet = async (pet) => {
@@ -62,6 +71,9 @@ const onSelectPet = async (pet) => {
     currentPet.value = pet;
     pets.value = pets.value.map((item) => ({ ...item, primary: item.id === pet.id }));
     router.push(`/pets/${pet.id}`);
+    if (feedType.value === "follow") {
+      loadPosts();
+    }
   } catch {}
 };
 
@@ -70,6 +82,25 @@ const goAddPet = () => {
 };
 
 const goPublish = () => {
-  router.push("/pets/create");
+  if (currentPet.value?.id) {
+    router.push({ path: "/posts/create", query: { petId: String(currentPet.value.id) } });
+    return;
+  }
+  router.push("/posts/create");
+};
+
+const loadPosts = async () => {
+  loadingPosts.value = true;
+  postError.value = "";
+  try {
+    const petId = feedType.value === "follow" ? currentPet.value?.id : null;
+    const query = petId ? `/api/posts?petId=${petId}&page=0&size=20` : "/api/posts?page=0&size=20";
+    const page = await api.get(query);
+    posts.value = page?.content || [];
+  } catch (err) {
+    postError.value = err.details?.[0] || err.message || "加载动态失败";
+  } finally {
+    loadingPosts.value = false;
+  }
 };
 </script>

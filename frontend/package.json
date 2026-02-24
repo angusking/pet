@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:uploads": "sirv D:/pet/uploads --dev --host 127.0.0.1 --port 9090 --cors",
+    "dev": "vite --host 0.0.0.0",
+    "dev:uploads": "sirv D:/pet/uploads --dev --host 0.0.0.0 --port 9090 --cors",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "vue": "^3.4.15",

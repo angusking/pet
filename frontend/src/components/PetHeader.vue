@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <header ref="headerRef" class="home-header">
     <div class="header-top">
       <button class="pet-switch" type="button" @click="toggleDrawer">
@@ -27,12 +27,6 @@
 
       <button class="publish-btn" type="button" @click="$emit('publish')">发布</button>
     </div>
-
-    <div v-if="currentPet" class="current-pet">
-      <div class="name">{{ currentPet.name || "未命名" }}</div>
-      <div class="meta">{{ petMeta(currentPet) }}</div>
-    </div>
-    <div v-else class="current-pet empty">还没有宠物，先添加一只吧</div>
 
     <transition name="pet-popover-transition">
       <section v-if="drawerOpen" class="pet-popover">
@@ -95,13 +89,6 @@ const headerRef = ref(null);
 
 const currentAvatar = computed(() => props.currentPet?.avatarUrl || "/assets/images/avatar.jpg");
 const currentPetId = computed(() => props.currentPet?.id ?? null);
-
-const petMeta = (pet) => {
-  const genderMap = { 1: "公", 2: "母" };
-  const gender = genderMap[pet.gender] || "未知";
-  const breed = pet.breed || "未知品种";
-  return `${breed} · ${gender}`;
-};
 
 const petLine = (pet) => {
   const breed = pet.breed || "未知品种";

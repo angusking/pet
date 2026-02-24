@@ -1,0 +1,2 @@
+ALTER TABLE posts
+  ADD COLUMN tags_json TEXT NULL AFTER city;

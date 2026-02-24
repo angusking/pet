@@ -1,0 +1,50 @@
+.back-top {
+  position: fixed;
+  right: 14px;
+  bottom: 86px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #1f1d1a;
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  opacity: 0.85;
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: #f8f2e8;
+  border-top: 1px solid #e7d8c7;
+  padding: 10px 8px calc(12px + env(safe-area-inset-bottom));
+  gap: 6px;
+}
+
+.tab {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  position: relative;
+}
+
+.tab.active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tab.has-dot::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: #ff4d4d;
+  border-radius: 50%;
+  position: absolute;
+  top: -2px;
+  right: 16px;
+}

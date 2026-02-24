@@ -1,0 +1,159 @@
+.pet-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #fff4df 0%, #f4f2ef 38%, #f4f2ef 100%);
+}
+
+.pet-screen-top {
+  height: 56px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e9dcc8;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.back-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #e8d5bb;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+
+.pet-screen-title {
+  justify-self: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pet-screen-top-space {
+  width: 52px;
+}
+
+.pet-screen-main {
+  flex: 1;
+  padding: 14px;
+  display: grid;
+  grid-template-rows: 1fr 2fr;
+  gap: 12px;
+}
+
+.pet-screen-card {
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+}
+
+.pet-screen-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #f1cca0;
+}
+
+.pet-screen-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.pet-screen-meta {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+}
+
+.pet-screen-tags {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pet-screen-posts {
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.pet-screen-posts-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pet-screen-posts-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.plus-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--brand);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.pet-screen-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  font-family: var(--font-sans);
+}
+
+.pet-screen .pet-diary-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+}
+
+.pet-screen .pet-diary-item {
+  border: 1px solid #ecdfcb;
+  background: #fff9ef;
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.pet-screen .pet-diary-content {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pet-screen .pet-diary-img {
+  margin-top: 8px;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.pet-screen .pet-diary-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+}

@@ -56,6 +56,9 @@ export const api = {
   post(path, body) {
     return request(path, { method: "POST", body: JSON.stringify(body) });
   },
+  delete(path) {
+    return request(path, { method: "DELETE" });
+  },
   upload(path, file) {
     const formData = new FormData();
     formData.append("file", file);

@@ -1,8 +1,10 @@
 package com.pet.api.user;
 
 import com.pet.api.user.dto.AvatarUpdateRequest;
+import com.pet.api.user.dto.MeProfileResponse;
 import com.pet.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +18,12 @@ public class MeController {
 
   public MeController(UserService userService) {
     this.userService = userService;
+  }
+
+  @GetMapping("/profile")
+  public MeProfileResponse profile(Authentication authentication) {
+    Long userId = (Long) authentication.getPrincipal();
+    return userService.getProfile(userId);
   }
 
   @PostMapping("/avatar")
