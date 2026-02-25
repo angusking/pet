@@ -2,6 +2,8 @@
   port: 8080
 
 spring:
+  config:
+    import: optional:classpath:application-ai.yml
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/pet?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DB_USER:root}
@@ -36,3 +38,5 @@ app:
   upload:
     base-dir: ${UPLOAD_BASE_DIR:./uploads}
     public-base: /uploads
+  ai:
+    provider: ${AI_PROVIDER:mock}

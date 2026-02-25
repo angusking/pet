@@ -1,0 +1,72 @@
+﻿app:
+  ai:
+    # 单个对话中“用户消息”最大条数（不含 AI 回复）
+    # 超出后接口返回：当前用户咨询已达上限
+    session-max-user-messages: ${AI_SESSION_MAX_USER_MESSAGES:5}
+
+    # AI 提供方：
+    # - mock：本地模拟回复（默认，适合前后端联调）
+    # - qwen：调用阿里云百炼 / DashScope 千问模型
+    provider: ${AI_PROVIDER:qwen}
+
+    qwen:
+      # 百炼 API Key（建议通过环境变量配置，不要写死到代码仓库）
+      # Windows PowerShell 示例：$env:DASHSCOPE_API_KEY="sk-xxx"
+      api-key: ${DASHSCOPE_API_KEY:sk-7c3c88e1b6214bdabf0a12647315e318}
+
+      # 默认模型（可按需要替换，如 qwen-max / qwen-turbo）
+      model: ${QWEN_MODEL:qwen-plus}
+
+      # 推荐模型参数（偏稳，适合结构化 JSON 输出）
+      # max_tokens 建议 400-500；这里默认 450
+      max-tokens: ${QWEN_MAX_TOKENS:450}
+      # temperature 建议 0.3-0.5；这里默认 0.4，减少发散
+      temperature: ${QWEN_TEMPERATURE:0.4}
+      # presence_penalty 建议 0
+      # 说明：当前项目使用的 DashScope Java SDK 版本未在 GenerationParam builder 暴露该参数，
+      # 暂保留配置用于后续 SDK 升级后接入（当前不会实际下发给模型）
+      presence-penalty: ${QWEN_PRESENCE_PENALTY:0}
+      # frequency_penalty 建议 0
+      # 同上，当前 SDK 版本暂不下发该参数
+      frequency-penalty: ${QWEN_FREQUENCY_PENALTY:0}
+
+      # 系统提示词文件路径（优先级高于下方 system-prompt）
+      # 建议把提示词放在 docs/AI 下，便于版本管理与调优
+      # 支持相对路径（相对后端启动目录）或绝对路径
+      system-prompt-file: ${QWEN_SYSTEM_PROMPT_FILE:./docs/AI/ai-system-prompt-v2.md}
+
+      # 区域基础地址（可选）：
+      # - 北京地域通常无需配置（SDK 默认地址即可）
+      # - 新加坡示例：https://dashscope-intl.aliyuncs.com/api/v1
+      # - 美国示例：https://dashscope-us.aliyuncs.com/api/v1
+      # - 金融云示例：https://dashscope-finance.aliyuncs.com/api/v1
+      # 留空时使用 SDK 默认地址
+      base-url: ${DASHSCOPE_BASE_URL:}
+
+      # 系统提示词文本回退（当 system-prompt-file 为空或读取失败时使用）
+      system-prompt: ${QWEN_SYSTEM_PROMPT:你是一位宠物健康与养护助手。回答时先给结论，再给原因和建议。}
+
+    debug-log:
+      # 是否启用 AI 调用调试日志落盘（文本文件，不入库）
+      enabled: ${AI_DEBUG_LOG_ENABLED:true}
+
+      # 调试日志目录（支持相对路径；默认相对后端启动目录）
+      # 会按日期自动建子目录，例如：./AIlog/2026-02-24/
+      dir: ${AI_DEBUG_LOG_DIR:./AIlog}
+
+      # 预览字段最大长度（message/reply/error 等只写截断预览，避免泄露过多内容）
+      preview-length: ${AI_DEBUG_LOG_PREVIEW_LENGTH:200}
+
+      # 是否写入完整请求内容（调优时可临时开启；默认关闭）
+      include-full-request: ${AI_DEBUG_LOG_INCLUDE_FULL_REQUEST:false}
+
+      # 是否写入完整响应内容（大模型返回全文）
+      # 当前按调优需求默认开启；如涉及敏感数据可通过环境变量关闭
+      include-full-response: ${AI_DEBUG_LOG_INCLUDE_FULL_RESPONSE:true}
+
+      # 成功调用是否落盘
+      write-on-success: ${AI_DEBUG_LOG_WRITE_ON_SUCCESS:true}
+
+      # 异常调用是否落盘（建议保持开启）
+      # 说明：异常日志会记录错误信息全文、根因链和堆栈全文，文件体积会更大
+      write-on-error: ${AI_DEBUG_LOG_WRITE_ON_ERROR:true}

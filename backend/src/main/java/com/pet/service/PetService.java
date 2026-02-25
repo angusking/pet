@@ -18,19 +18,31 @@ import org.springframework.transaction.annotation.Transactional;
 public class PetService {
   private final PetRepository petRepository;
   private final ObjectMapper objectMapper;
+  private final LoginUserStateService loginUserStateService;
 
-  public PetService(PetRepository petRepository, ObjectMapper objectMapper) {
+  public PetService(
+      PetRepository petRepository,
+      ObjectMapper objectMapper,
+      LoginUserStateService loginUserStateService) {
     this.petRepository = petRepository;
     this.objectMapper = objectMapper;
+    this.loginUserStateService = loginUserStateService;
   }
 
   @Transactional(readOnly = true)
   public PetResponse getMyPrimaryPet(Long userId) {
+    PetResponse cached = loginUserStateService.getCurrentPet(userId);
+    if (cached != null) {
+      return cached;
+    }
     List<PetEntity> pets = petRepository.findByUserIdOrderByIsPrimaryDescIdAsc(userId);
     if (pets.isEmpty()) {
+      loginUserStateService.updateCurrentPet(userId, null);
       return null;
     }
-    return toResponse(pets.get(0));
+    PetResponse pet = toResponse(pets.get(0));
+    loginUserStateService.updateCurrentPet(userId, pet);
+    return pet;
   }
 
   @Transactional(readOnly = true)
@@ -60,7 +72,11 @@ public class PetService {
     pet.setTagsJson(toJson(request.tags()));
     pet.setIsPrimary(petRepository.countByUserId(userId) == 0);
     PetEntity saved = petRepository.save(pet);
-    return toResponse(saved);
+    PetResponse response = toResponse(saved);
+    if (response.primary()) {
+      loginUserStateService.updateCurrentPet(userId, response);
+    }
+    return response;
   }
 
   @Transactional
@@ -70,6 +86,7 @@ public class PetService {
     petRepository.clearPrimary(userId);
     pet.setIsPrimary(true);
     petRepository.save(pet);
+    loginUserStateService.updateCurrentPet(userId, toResponse(pet));
   }
 
   @Transactional
@@ -78,6 +95,19 @@ public class PetService {
         .orElseThrow(() -> new BusinessException(ApiError.PET_NOT_FOUND, HttpStatus.NOT_FOUND));
     pet.setAvatarUrl(avatarUrl);
     petRepository.save(pet);
+    if (Boolean.TRUE.equals(pet.getIsPrimary())) {
+      loginUserStateService.updateCurrentPet(userId, toResponse(pet));
+    }
+  }
+
+  @Transactional(readOnly = true)
+  public void syncCurrentPrimaryToLoginState(Long userId) {
+    List<PetEntity> pets = petRepository.findByUserIdOrderByIsPrimaryDescIdAsc(userId);
+    if (pets.isEmpty()) {
+      loginUserStateService.updateCurrentPet(userId, null);
+      return;
+    }
+    loginUserStateService.updateCurrentPet(userId, toResponse(pets.get(0)));
   }
 
   private PetResponse toResponse(PetEntity pet) {

@@ -8,6 +8,7 @@ import PostCreateView from "./views/PostCreateView.vue";
 import PostDetailView from "./views/PostDetailView.vue";
 import MyView from "./views/MyView.vue";
 import MyPostsView from "./views/MyPostsView.vue";
+import AiAssistantView from "./views/AiAssistantView.vue";
 import { getToken } from "./utils/auth";
 
 const routes = [
@@ -18,6 +19,7 @@ const routes = [
   { path: "/pets/:id", name: "pet-detail", component: PetDetailView, meta: { requiresAuth: true } },
   { path: "/posts/create", name: "post-create", component: PostCreateView, meta: { requiresAuth: true } },
   { path: "/posts/:id", name: "post-detail", component: PostDetailView, meta: { requiresAuth: true } },
+  { path: "/assistant", name: "assistant", component: AiAssistantView, meta: { requiresAuth: true } },
   { path: "/me", name: "me", component: MyView, meta: { requiresAuth: true } },
   { path: "/me/posts", name: "my-posts", component: MyPostsView, meta: { requiresAuth: true } },
 ];

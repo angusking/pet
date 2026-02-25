@@ -9,24 +9,21 @@ public class StrongPasswordValidator implements ConstraintValidator<StrongPasswo
     if (value == null || value.isBlank()) {
       return false;
     }
-    if (value.length() < 8 || value.length() > 100) {
+    if (value.length() < 6 || value.length() > 100) {
       return false;
     }
-    boolean hasUpper = false;
-    boolean hasLower = false;
+    boolean hasLetter = false;
     boolean hasDigit = false;
-    boolean hasSpecial = false;
     for (char c : value.toCharArray()) {
-      if (Character.isUpperCase(c)) {
-        hasUpper = true;
-      } else if (Character.isLowerCase(c)) {
-        hasLower = true;
+      if (Character.isLetter(c)) {
+        hasLetter = true;
       } else if (Character.isDigit(c)) {
         hasDigit = true;
-      } else {
-        hasSpecial = true;
+      }
+      if (hasLetter && hasDigit) {
+        return true;
       }
     }
-    return hasUpper && hasLower && hasDigit && hasSpecial;
+    return false;
   }
 }

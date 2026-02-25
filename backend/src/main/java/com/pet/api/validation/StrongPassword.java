@@ -13,7 +13,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface StrongPassword {
-  String message() default "密码至少 8 位，且包含大小写字母、数字和特殊字符";
+  String message() default "密码至少6位，且需包含字母和数字";
 
   Class<?>[] groups() default {};
 

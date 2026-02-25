@@ -16,11 +16,17 @@ public class AuthService {
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final JwtService jwtService;
+  private final PetService petService;
 
-  public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+  public AuthService(
+      UserRepository userRepository,
+      PasswordEncoder passwordEncoder,
+      JwtService jwtService,
+      PetService petService) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
+    this.petService = petService;
   }
 
   public String register(RegisterRequest request) {
@@ -34,6 +40,7 @@ public class AuthService {
     user.setRole("USER");
     user.setStatus("ACTIVE");
     UserEntity saved = userRepository.save(user);
+    petService.syncCurrentPrimaryToLoginState(saved.getId());
     return jwtService.generateToken(saved.getId(), saved.getRole());
   }
 
@@ -43,6 +50,7 @@ public class AuthService {
     if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
       throw new BusinessException(ApiError.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
     }
+    petService.syncCurrentPrimaryToLoginState(user.getId());
     return jwtService.generateToken(user.getId(), user.getRole());
   }
 }

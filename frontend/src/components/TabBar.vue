@@ -3,7 +3,7 @@
     <router-link class="tab" :class="{ active: route.path === '/' }" to="/">首页</router-link>
     <a class="tab" href="#">市集</a>
     <router-link class="tab" :class="{ active: route.path === '/posts/create' }" to="/posts/create">发布</router-link>
-    <a class="tab has-dot" href="#">助手</a>
+    <router-link class="tab has-dot" :class="{ active: route.path === '/assistant' }" to="/assistant">助手</router-link>
     <router-link class="tab" :class="{ active: route.path === '/me' }" to="/me">我的</router-link>
   </nav>
 </template>

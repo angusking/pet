@@ -13,6 +13,7 @@ public enum ApiError {
   FILE_REQUIRED(3000, "请选择要上传的文件"),
   UPLOAD_FAILED(3001, "上传失败"),
   FILE_TOO_LARGE(3002, "上传文件过大"),
+  AI_CHAT_LIMIT_REACHED(4000, "当前用户咨询已达上限"),
 
   INTERNAL_ERROR(9000, "服务器内部错误");
 

@@ -40,11 +40,9 @@ const error = ref("");
 const validate = () => {
   if (!form.username) return "请输入用户名";
   if (!form.password) return "请输入密码";
-  if (form.password.length < 8) return "密码至少 8 位";
-  if (!/[A-Z]/.test(form.password)) return "密码需包含大写字母";
-  if (!/[a-z]/.test(form.password)) return "密码需包含小写字母";
+  if (form.password.length < 6) return "密码至少 6 位";
+  if (!/[A-Za-z]/.test(form.password)) return "密码需包含字母";
   if (!/[0-9]/.test(form.password)) return "密码需包含数字";
-  if (!/[^A-Za-z0-9]/.test(form.password)) return "密码需包含特殊字符";
   return "";
 };
 
