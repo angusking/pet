@@ -4,6 +4,10 @@ WORKDIR /app
 
 RUN corepack enable
 
+# Use domestic registry mirror during Docker build (pnpm / npm).
+RUN pnpm config set registry https://registry.npmmirror.com \
+  && npm config set registry https://registry.npmmirror.com
+
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
@@ -15,10 +19,9 @@ FROM nginx:1.27-alpine
 
 WORKDIR /usr/share/nginx/html
 
-# nginx 官方镜像会对 /etc/nginx/templates/*.template 做 envsubst
-# 默认指向 docker-compose 常用服务名 backend
-ENV BACKEND_UPSTREAM=http://backend:8080
-ENV UPLOADS_UPSTREAM=http://backend:8080
+# Nginx official image renders /etc/nginx/templates/*.template via envsubst.
+# Default upstream points to backend service in docker compose network.
+ENV BACKEND_UPSTREAM=http://pet-backend:8080
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist ./
