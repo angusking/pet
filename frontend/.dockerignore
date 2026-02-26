@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# VCS
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+
+# Env files (按需通过构建参数或运行时注入)
+.env
+.env.*

@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: pet-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=200
+    env_file:
+      - ./env/mysql.env
+    ports:
+      - "3306:3306"
+    volumes:
+      - ${MYSQL_DATA_DIR:-/srv/pet/mysql/data}:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - pet-network
+    restart: unless-stopped
+
+networks:
+  pet-network:
+    name: pet-network
+    external: true

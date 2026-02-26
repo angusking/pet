@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-pet-backend:latest}
+    container_name: pet-backend
+    env_file:
+      - ./env/backend.env
+    environment:
+      TZ: Asia/Shanghai
+      DB_URL: ${DB_URL:-jdbc:mysql://pet-mysql:3306/pet_demo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      DB_USER: ${DB_USER:-pet}
+      DB_PASSWORD: ${DB_PASSWORD:-pet123}
+      REDIS_HOST: ${REDIS_HOST:-pet-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      UPLOAD_BASE_DIR: /app/uploads
+      AI_PROVIDER: ${AI_PROVIDER:-qwen}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${UPLOADS_DIR:-/srv/pet/uploads}:/app/uploads
+      - ${AI_LOG_DIR:-/srv/pet/AIlog}:/app/AIlog
+      - ./config/backend/application.yml:/app/config/application.yml:ro
+      - ./config/backend/application-ai.yml:/app/config/application-ai.yml:ro
+    networks:
+      - pet-network
+    restart: unless-stopped
+
+networks:
+  pet-network:
+    name: pet-network
+    external: true

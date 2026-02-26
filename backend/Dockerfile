@@ -43,7 +43,11 @@ USER appuser
 EXPOSE 8080
 
 # JVM 内存限制（适合 2G 服务器）
-ENV JAVA_OPTS="-Xms256m -Xmx512m"
+ENV JAVA_OPTS="\
+-XX:InitialRAMPercentage=20 \
+-XX:MaxRAMPercentage=40 \
+-XX:+UseG1GC \
+-XX:+ExitOnOutOfMemoryError"
 
 # 可通过 docker-compose 或 -e 传入：
 # SPRING_PROFILES_ACTIVE=prod

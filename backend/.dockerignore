@@ -1,0 +1,29 @@
+# Build output
+target/
+
+# Local runtime data
+uploads/
+AIlog/
+logs/
+
+# VCS
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env / local config
+.env
+.env.*
+
+# Docs and temp files not needed for backend image build
+*.log
+*.tmp
+*.swp

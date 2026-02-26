@@ -20,3 +20,4 @@ mysql_data/
 redis_data/
 /.editorconfig
 /backend/src/main/resources/application-dev.yml
+/AIlog/
