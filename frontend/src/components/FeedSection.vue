@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <main class="feed">
     <div class="feed-head">
       <div class="feed-title">{{ feedTitle }}</div>
@@ -12,7 +12,13 @@
     <p v-else-if="!posts.length" class="muted">还没有动态，去发布第一条吧。</p>
 
     <section v-else class="masonry">
-      <article v-for="post in posts" :key="post.id" class="card clickable" @click="openPost(post.id)">
+      <article
+        v-for="post in posts"
+        :key="post.id"
+        class="card"
+        :class="{ clickable: !post.ad, ad: post.ad }"
+        @click="openPost(post)"
+      >
         <div class="card-head">
           <span class="user">用户 {{ post.userId }}{{ post.city ? ` · ${post.city}` : "" }}</span>
         </div>
@@ -25,13 +31,14 @@
             decoding="async"
             @error="onImageError($event, post.mediaUrls[0])"
           />
-          <span class="media-badge">📷 {{ post.mediaUrls.length }}</span>
+          <span v-if="!post.ad" class="media-badge">📷 {{ post.mediaUrls.length }}</span>
         </div>
 
-        <h3>{{ trimContent(post.content) }}</h3>
+        <h3>{{ post.title || trimContent(post.content) }}</h3>
         <p class="excerpt">{{ post.content }}</p>
         <div v-if="post.tags?.length" class="tags">{{ post.tags.map((t) => `#${t}`).join(" ") }}</div>
         <div class="meta">{{ formatTime(post.createdAt) }}</div>
+        <span v-if="post.ad" class="ad-corner">广告</span>
       </article>
     </section>
   </main>
@@ -62,12 +69,12 @@ const formatTime = (v) => {
   if (!v) return "";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  return d.toLocaleString();
+  return d.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
 };
 
-const openPost = (id) => {
-  if (!id) return;
-  router.push(`/posts/${id}`);
+const openPost = (post) => {
+  if (!post || post.ad || !post.id) return;
+  router.push(`/posts/${post.id}`);
 };
 
 const toFeedImageUrl = (url) => {

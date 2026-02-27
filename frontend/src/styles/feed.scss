@@ -40,6 +40,7 @@
   padding: 12px 12px 14px;
   margin-bottom: 12px;
   box-shadow: 0 10px 26px rgba(35, 31, 26, 0.08);
+  position: relative;
 }
 
 .card.clickable {
@@ -148,6 +149,19 @@
 .ad {
   border: 1px dashed #f1c08a;
   background: #fff5e4;
+}
+
+.ad-corner {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.4;
+  font-family: var(--font-sans);
+  color: #fff;
+  background: rgba(233, 53, 86, 0.9);
 }
 
 .ad-badge,

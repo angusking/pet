@@ -38,6 +38,30 @@ const feedType = ref("discover");
 const posts = ref([]);
 const loadingPosts = ref(false);
 const postError = ref("");
+const AD_POSTS = [
+  {
+    id: "ad-food",
+    ad: true,
+    userId: "品牌推荐",
+    city: "精选",
+    title: "健康狗粮",
+    content: "科学配比营养，呵护肠胃与皮毛，适合日常长期喂养。",
+    tags: ["健康狗粮"],
+    createdAt: "2026-02-27T08:00:00+08:00",
+    mediaUrls: ["/assets/images/ad-food.jpg"],
+  },
+  {
+    id: "ad-travel",
+    ad: true,
+    userId: "品牌推荐",
+    city: "出行",
+    title: "携宠旅行",
+    content: "带上毛孩子一起出发，友好住宿与路线攻略一站搞定。",
+    tags: ["携宠旅行"],
+    createdAt: "2026-02-27T08:00:00+08:00",
+    mediaUrls: ["/assets/images/ad-travel.jpg"],
+  },
+];
 
 onMounted(async () => {
   await loadHeaderData();
@@ -96,11 +120,30 @@ const loadPosts = async () => {
     const petId = feedType.value === "follow" ? currentPet.value?.id : null;
     const query = petId ? `/api/posts?petId=${petId}&page=0&size=20` : "/api/posts?page=0&size=20";
     const page = await api.get(query);
-    posts.value = page?.content || [];
+    const realPosts = Array.isArray(page?.content) ? page.content : [];
+    posts.value = insertAdsByFixedPosition(realPosts, AD_POSTS);
   } catch (err) {
     postError.value = err.details?.[0] || err.message || "加载动态失败";
   } finally {
     loadingPosts.value = false;
   }
+};
+
+const insertAdsByFixedPosition = (list, ads) => {
+  const result = [...list];
+  if (!ads?.length) return result;
+
+  const firstAd = { ...ads[0] };
+  const secondAd = ads[1] ? { ...ads[1] } : null;
+
+  // 默认放第4个位置（下标3）
+  const firstIndex = Math.min(3, result.length);
+  result.splice(firstIndex, 0, firstAd);
+
+  // 第二个广告放最后一个
+  if (secondAd) {
+    result.push(secondAd);
+  }
+  return result;
 };
 </script>
