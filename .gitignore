@@ -21,3 +21,5 @@ redis_data/
 /.editorconfig
 /backend/src/main/resources/application-dev.yml
 /AIlog/
+/backend/src/main/resources/application-dev-ai.yml
+/deploy/.env.example

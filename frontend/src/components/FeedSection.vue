@@ -18,7 +18,13 @@
         </div>
 
         <div v-if="post.mediaUrls?.length" class="media" :class="{ tall: post.mediaUrls.length > 1 }">
-          <img :src="post.mediaUrls[0]" alt="帖子图片" />
+          <img
+            :src="toFeedImageUrl(post.mediaUrls[0])"
+            alt="帖子图片"
+            loading="lazy"
+            decoding="async"
+            @error="onImageError($event, post.mediaUrls[0])"
+          />
           <span class="media-badge">📷 {{ post.mediaUrls.length }}</span>
         </div>
 
@@ -62,5 +68,23 @@ const formatTime = (v) => {
 const openPost = (id) => {
   if (!id) return;
   router.push(`/posts/${id}`);
+};
+
+const toFeedImageUrl = (url) => {
+  if (!url) return url;
+  const q = url.indexOf("?");
+  const path = q >= 0 ? url.slice(0, q) : url;
+  const query = q >= 0 ? url.slice(q) : "";
+  const dot = path.lastIndexOf(".");
+  const slash = path.lastIndexOf("/");
+  if (dot <= slash) return url;
+  return `${path.slice(0, dot)}_thumb.jpg${query}`;
+};
+
+const onImageError = (event, originalUrl) => {
+  if (!event?.target || !originalUrl) return;
+  if (event.target.dataset.fallbackApplied === "1") return;
+  event.target.dataset.fallbackApplied = "1";
+  event.target.src = originalUrl;
 };
 </script>

@@ -8,7 +8,8 @@ services:
       - ./env/backend.env
     environment:
       TZ: Asia/Shanghai
-      DB_URL: ${DB_URL:-jdbc:mysql://pet-mysql:3306/pet_demo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai
+      DB_URL: ${DB_URL:-jdbc:mysql://pet-mysql:3306/pet_demo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
       DB_USER: ${DB_USER:-pet}
       DB_PASSWORD: ${DB_PASSWORD:-pet123}
       REDIS_HOST: ${REDIS_HOST:-pet-redis}

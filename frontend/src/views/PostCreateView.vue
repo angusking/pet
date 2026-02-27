@@ -65,6 +65,8 @@ const uploading = ref(false);
 const error = ref("");
 const linkedPet = ref(null);
 const tagInput = ref("");
+const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 20);
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 const cityOptions = ["北京", "上海", "广州", "深圳", "杭州", "成都", "重庆", "武汉", "南京", "西安"];
 
@@ -116,14 +118,45 @@ const removeTag = (tag) => {
 
 const chooseImages = () => fileInputRef.value?.click();
 
+const messageFromError = (err, fallback) => {
+  const detail = Array.isArray(err?.details) && err.details.length > 0 ? err.details[0] : "";
+  if (detail) return detail;
+  if (err?.message) return err.message;
+  return fallback;
+};
+
 const onFilesChange = (event) => {
   previewUrls.value.forEach((u) => URL.revokeObjectURL(u));
-  const files = Array.from(event.target.files || [])
-    .filter((f) => f.type.startsWith("image/"))
-    .slice(0, 9);
+  const picked = Array.from(event.target.files || []);
+  if (!picked.length) {
+    selectedFiles.value = [];
+    previewUrls.value = [];
+    return;
+  }
+
+  if (picked.some((f) => !f.type.startsWith("image/"))) {
+    error.value = "仅支持图片格式文件";
+    selectedFiles.value = [];
+    previewUrls.value = [];
+    return;
+  }
+  const tooLarge = picked.find((f) => f.size > MAX_UPLOAD_BYTES);
+  if (tooLarge) {
+    error.value = `图片过大，请上传 ${MAX_UPLOAD_MB}MB 以内文件`;
+    selectedFiles.value = [];
+    previewUrls.value = [];
+    return;
+  }
+
+  const files = picked.slice(0, 9);
+  if (picked.length > 9) {
+    error.value = "最多上传 9 张图片";
+  }
   selectedFiles.value = files;
   previewUrls.value = files.map((f) => URL.createObjectURL(f));
-  error.value = "";
+  if (picked.length <= 9) {
+    error.value = "";
+  }
 };
 
 const submit = async () => {
@@ -150,7 +183,7 @@ const submit = async () => {
     });
     router.push("/");
   } catch (err) {
-    error.value = err.details?.[0] || err.message || "发布失败";
+    error.value = messageFromError(err, "发布失败，请稍后重试");
   } finally {
     uploading.value = false;
   }

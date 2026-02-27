@@ -64,6 +64,8 @@ const error = ref("");
 const submitting = ref(false);
 const selectedFile = ref(null);
 const localPreviewBase64 = ref("");
+const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 20);
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 const form = reactive({
   name: "",
   breed: "",
@@ -80,7 +82,7 @@ const messageFromError = (err, fallback) => {
   if (err?.status === 401 || err?.code === 1001) return "登录已过期，请重新登录";
   if (err?.code === 3000) return "请选择图片后再上传";
   if (err?.code === 3001) return "图片上传失败，请稍后重试";
-  if (err?.code === 3002) return "图片过大，请上传 5MB 以内文件";
+  if (err?.code === 3002) return `图片过大，请上传 ${MAX_UPLOAD_MB}MB 以内文件`;
   if (err?.code === 1000) return err?.details?.[0] || "请检查表单内容";
   if (Array.isArray(err?.details) && err.details.length > 0) return err.details[0];
   return err?.message || fallback;
@@ -106,8 +108,8 @@ const onFileChange = async (event) => {
     error.value = "仅支持图片格式文件";
     return;
   }
-  if (file.size > 5 * 1024 * 1024) {
-    error.value = "图片大小不能超过 5MB";
+  if (file.size > MAX_UPLOAD_BYTES) {
+    error.value = `图片过大，请上传 ${MAX_UPLOAD_MB}MB 以内文件`;
     return;
   }
 
