@@ -18,8 +18,8 @@ spring:
     enabled: true
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE:10MB}
-      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+      max-file-size: ${MAX_FILE_SIZE:20MB}
+      max-request-size: ${MAX_REQUEST_SIZE:25MB}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

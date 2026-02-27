@@ -22,6 +22,7 @@ WORKDIR /usr/share/nginx/html
 # Nginx official image renders /etc/nginx/templates/*.template via envsubst.
 # Default upstream points to backend service in docker compose network.
 ENV BACKEND_UPSTREAM=http://pet-backend:8080
+ENV CLIENT_MAX_BODY_SIZE=25m
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist ./

@@ -7,11 +7,14 @@ COPY pom.xml ./
 COPY .mvn/settings.xml /root/.m2/settings.xml
 
 # Pre-fetch dependencies using Aliyun mirror.
-RUN mvn -s /root/.m2/settings.xml -B -DskipTests dependency:go-offline
+# BuildKit cache keeps Maven repo between docker builds.
+RUN --mount=type=cache,target=/root/.m2/repository \
+  mvn -s /root/.m2/settings.xml -B -DskipTests dependency:go-offline
 
 # Copy source after dependency layer.
 COPY src ./src
-RUN mvn -s /root/.m2/settings.xml -B -DskipTests package
+RUN --mount=type=cache,target=/root/.m2/repository \
+  mvn -s /root/.m2/settings.xml -B -DskipTests package
 
 # Copy the runnable Spring Boot jar (exclude original-*.jar)
 RUN sh -c 'ls target/*.jar | grep -v "original-" | head -n 1 | xargs -I{} cp "{}" /build/app.jar'

@@ -13,8 +13,8 @@ app:
       temperature: ${QWEN_TEMPERATURE:0.4}
       presence-penalty: ${QWEN_PRESENCE_PENALTY:0}
       frequency-penalty: ${QWEN_FREQUENCY_PENALTY:0}
-      # 提示词文件可挂载/替换；默认读取容器内项目路径
-      system-prompt-file: ${QWEN_SYSTEM_PROMPT_FILE:./docs/AI/ai-system-prompt-v2.md}
+      # 提示词文件可挂载/替换；默认读取容器内外挂目录
+      system-prompt-file: ${QWEN_SYSTEM_PROMPT_FILE:/app/config/prompts/ai-system-prompt-v2.md}
       base-url: ${DASHSCOPE_BASE_URL:}
       system-prompt: ${QWEN_SYSTEM_PROMPT:你是一位宠物健康与养护助手。回答时先给结论，再给原因和建议。}
 

@@ -23,6 +23,7 @@ services:
       - ${AI_LOG_DIR:-/srv/pet/AIlog}:/app/AIlog
       - ./config/backend/application.yml:/app/config/application.yml:ro
       - ./config/backend/application-ai.yml:/app/config/application-ai.yml:ro
+      - ./config/backend/prompts:/app/config/prompts:ro
     networks:
       - pet-network
     restart: unless-stopped

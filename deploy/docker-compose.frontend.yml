@@ -13,6 +13,7 @@ services:
       - "80:80"
     volumes:
       - ${UPLOADS_DIR:-/srv/pet/uploads}:/data/uploads:ro
+      - ./config/frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     networks:
       - pet-network
     restart: unless-stopped
