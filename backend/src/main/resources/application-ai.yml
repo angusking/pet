@@ -12,7 +12,7 @@
     qwen:
       # 百炼 API Key（建议通过环境变量配置，不要写死到代码仓库）
       # Windows PowerShell 示例：$env:DASHSCOPE_API_KEY="sk-xxx"
-      api-key: ${DASHSCOPE_API_KEY:sk-7c3c88e1b6214bdabf0a12647315e318}
+      api-key: ${DASHSCOPE_API_KEY:}
 
       # 默认模型（可按需要替换，如 qwen-max / qwen-turbo）
       model: ${QWEN_MODEL:qwen-plus}
