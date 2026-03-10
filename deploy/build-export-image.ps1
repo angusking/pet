@@ -94,3 +94,4 @@ foreach ($target in $targets) {
 Write-Host ""
 Success "All selected targets completed."
 Write-Host "Export directory: $exportDir"
+[void](Read-Host "Press Enter to exit")
