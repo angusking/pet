@@ -16,7 +16,7 @@
         v-for="post in posts"
         :key="post.id"
         class="card"
-        :class="{ clickable: !post.ad, ad: post.ad }"
+        :class="{ clickable: !post.ad, 'is-sponsored': post.ad }"
         @click="openPost(post)"
       >
         <div class="card-head">
@@ -38,7 +38,7 @@
         <p class="excerpt">{{ post.content }}</p>
         <div v-if="post.tags?.length" class="tags">{{ post.tags.map((t) => `#${t}`).join(" ") }}</div>
         <div class="meta">{{ formatTime(post.createdAt) }}</div>
-        <span v-if="post.ad" class="ad-corner">广告</span>
+        <span v-if="post.ad" class="sponsored-corner">广告</span>
       </article>
     </section>
   </main>
