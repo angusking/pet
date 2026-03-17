@@ -17,7 +17,7 @@
 5. 不做确定性诊断。
 6. 如果出现高风险症状，应明确建议及时就医。
 7. checklist 和 followUps 必须是数组。
-8. services 必须是数组，数组元素包含 name、description、url。
+8. services 必须是数组，数组元素包含 name、description。
 
 输出示例：
 {
