@@ -20,7 +20,10 @@ public class AiServiceProvider implements AiProvider {
   private final RestClient restClient;
   private final ObjectMapper objectMapper;
 
-  public AiServiceProvider(RestClient.Builder restClientBuilder, AiProperties aiProperties, ObjectMapper objectMapper) {
+  public AiServiceProvider(
+      RestClient.Builder restClientBuilder,
+      AiProperties aiProperties,
+      ObjectMapper objectMapper) {
     this.restClient = restClientBuilder
         .baseUrl(aiProperties.getAiService().getBaseUrl())
         .build();
@@ -80,30 +83,40 @@ public class AiServiceProvider implements AiProvider {
     return new AiServiceChatRequest.PetInfo(
         pet.getId(),
         pet.getName(),
-        inferPetType(pet.getBreed()),
-        calculateAge(pet.getBirthday()),
-        pet.getWeightKg() == null ? null : pet.getWeightKg().setScale(1, RoundingMode.HALF_UP).doubleValue());
+        inferPetType(pet),
+        calculateAge(pet.getBirthDate()),
+        pet.getCurrentWeight() == null ? null : pet.getCurrentWeight().setScale(1, RoundingMode.HALF_UP).doubleValue());
   }
 
-  private String inferPetType(String breed) {
+  private String inferPetType(PetEntity pet) {
+    String categoryPath = pet.getCategoryPath();
+    if (categoryPath != null && !categoryPath.isBlank()) {
+      String root = categoryPath.split("/")[0];
+      return switch (root) {
+        case "cat", "dog", "bird", "rodent", "rabbit", "reptile", "fish" -> root;
+        default -> "";
+      };
+    }
+
+    String breed = pet.getBreed();
     if (breed == null || breed.isBlank()) {
       return "";
     }
     String normalized = breed.trim().toLowerCase();
-    if (normalized.contains("猫") || normalized.contains("cat")) {
+    if (normalized.contains("cat")) {
       return "cat";
     }
-    if (normalized.contains("狗") || normalized.contains("犬") || normalized.contains("dog")) {
+    if (normalized.contains("dog")) {
       return "dog";
     }
     return "";
   }
 
-  private Double calculateAge(LocalDate birthday) {
-    if (birthday == null) {
+  private Double calculateAge(LocalDate birthDate) {
+    if (birthDate == null) {
       return null;
     }
-    Period period = Period.between(birthday, LocalDate.now());
+    Period period = Period.between(birthDate, LocalDate.now());
     double age = period.getYears() + (period.getMonths() / 12.0);
     return Math.round(age * 10.0) / 10.0;
   }

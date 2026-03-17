@@ -15,8 +15,9 @@
           <div class="pet-screen-name">{{ pet.name || "未命名" }}</div>
           <div class="pet-screen-meta">{{ pet.breed || "未知品种" }} · {{ petGender }}</div>
           <div class="pet-screen-tags">
-            <span class="tag">体重 {{ pet.weightKg != null ? `${pet.weightKg}kg` : "--" }}</span>
-            <span class="tag">生日 {{ pet.birthday || "未知" }}</span>
+            <span class="tag">体重 {{ pet.currentWeight != null ? `${pet.currentWeight}kg` : "--" }}</span>
+            <span class="tag">生日 {{ pet.birthDate || "未知" }}</span>
+            <span class="tag">绝育 {{ pet.neutered ? "是" : "否/未知" }}</span>
           </div>
         </template>
       </section>
@@ -46,6 +47,18 @@
           <p>还未发现宠物相关日记，去添加</p>
         </div>
       </section>
+
+      <section v-if="pet" class="pet-screen-danger">
+        <div class="danger-head">
+          <strong>危险操作</strong>
+          <span>删除后无法恢复</span>
+        </div>
+        <p class="muted">删除宠物档案后，当前宠物资料将被移除。</p>
+        <p v-if="deleteError" class="error">{{ deleteError }}</p>
+        <button type="button" class="danger-btn" :disabled="deletingPet" @click="deletePet">
+          {{ deletingPet ? "删除中..." : "删除宠物档案" }}
+        </button>
+      </section>
     </main>
   </div>
 </template>
@@ -63,12 +76,12 @@ const loadingPet = ref(true);
 const loadingPosts = ref(true);
 const petError = ref("");
 const postsError = ref("");
+const deletingPet = ref(false);
+const deleteError = ref("");
 
 const petGender = computed(() => {
-  if (!pet.value) return "未知";
-  if (pet.value.gender === 1) return "公";
-  if (pet.value.gender === 2) return "母";
-  return "未知";
+  if (!pet.value?.gender || pet.value.gender === "unknown") return "未知";
+  return pet.value.gender === "male" ? "公" : "母";
 });
 
 onMounted(async () => {
@@ -96,6 +109,23 @@ const formatTime = (value) => {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
+};
+
+const deletePet = async () => {
+  if (!pet.value?.id || deletingPet.value) return;
+  const confirmed = window.confirm(`确认删除宠物“${pet.value.name || "未命名"}”吗？删除后无法恢复。`);
+  if (!confirmed) return;
+
+  deletingPet.value = true;
+  deleteError.value = "";
+  try {
+    await api.delete(`/api/pets/${pet.value.id}`);
+    router.push("/");
+  } catch (err) {
+    deleteError.value = err.details?.[0] || err.message || "删除宠物失败";
+  } finally {
+    deletingPet.value = false;
+  }
 };
 
 const goHome = () => {

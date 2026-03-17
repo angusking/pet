@@ -91,6 +91,47 @@
   grid-template-rows: auto 1fr;
 }
 
+.pet-screen-danger {
+  background: #fff6f4;
+  border: 1px solid #f1c8c2;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.pet-screen-danger .danger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pet-screen-danger .danger-head strong {
+  color: #9f352a;
+}
+
+.pet-screen-danger .danger-head span {
+  color: #9e726b;
+  font-size: 12px;
+}
+
+.danger-btn {
+  width: 100%;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #b84034;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.danger-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .pet-screen-posts-head {
   display: flex;
   justify-content: space-between;

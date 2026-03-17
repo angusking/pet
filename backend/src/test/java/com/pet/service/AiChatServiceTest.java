@@ -169,7 +169,7 @@ class AiChatServiceTest {
     pet.setUserId(userId);
     pet.setName(name);
     pet.setBreed("Dog");
-    pet.setBirthday(LocalDate.of(2024, 1, 1));
+    pet.setBirthDate(LocalDate.of(2024, 1, 1));
     return pet;
   }
 

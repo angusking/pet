@@ -23,3 +23,6 @@ redis_data/
 /AIlog/
 /backend/src/main/resources/application-dev-ai.yml
 /deploy/.env.example
+AIService/.env
+/AIService/TEMP_LEARNING_GUIDE.md
+/deploy/exports/

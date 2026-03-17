@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="my-page">
     <section class="my-identity card-lite">
       <div class="my-user-row">
@@ -39,7 +39,7 @@
         <button v-for="pet in pets" :key="pet.id" class="pet-manage-card" @click="goPetDetailById(pet.id)">
           <img :src="pet.avatarUrl || '/assets/images/avatar.jpg'" alt="宠物头像" />
           <div class="name">{{ pet.name }}</div>
-          <div class="sub">{{ pet.breed || "未知品种" }} · {{ pet.weightKg != null ? `${pet.weightKg}kg` : "--kg" }}</div>
+          <div class="sub">{{ pet.breed || "未知品种" }} · {{ pet.currentWeight != null ? `${pet.currentWeight}kg` : "--kg" }}</div>
           <div class="tags">{{ pet.tags?.[0] || "健康正常" }}</div>
         </button>
         <button class="pet-manage-add" @click="goAddPet">+ 添加宠物</button>
@@ -70,7 +70,7 @@ const switchOpen = ref(false);
 
 const currentPetInfo = computed(() => {
   if (!currentPet.value) return "点击添加宠物";
-  return `${currentPet.value.breed || "未知品种"} · ${currentPet.value.birthday || "生日未知"}`;
+  return `${currentPet.value.breed || "未知品种"} · ${currentPet.value.birthDate || "生日未知"}`;
 });
 
 onMounted(async () => {

@@ -23,16 +23,34 @@ public class PetEntity {
   @Column(nullable = false, length = 50)
   private String name;
 
+  /**
+   * 兼容旧页面和旧接口展示使用的“可读文本”。
+   *
+   * <p>真实结构化分类数据在 categoryId / categoryPath / customSpeciesNote。
+   * breed 在当前版本继续保留，主要是减少现有功能的兼容成本。
+   */
   @Column(length = 50)
   private String breed;
 
-  @Column(columnDefinition = "TINYINT")
-  private Integer gender;
+  @Column(name = "category_id")
+  private Long categoryId;
 
-  private LocalDate birthday;
+  @Column(name = "category_path", length = 255)
+  private String categoryPath;
 
-  @Column(name = "weight_kg", precision = 5, scale = 2)
-  private BigDecimal weightKg;
+  @Column(name = "custom_species_note", length = 255)
+  private String customSpeciesNote;
+
+  @Column(length = 20)
+  private String gender;
+
+  @Column(name = "birth_date")
+  private LocalDate birthDate;
+
+  private Boolean neutered;
+
+  @Column(name = "current_weight", precision = 6, scale = 2)
+  private BigDecimal currentWeight;
 
   @Column(name = "avatar_url", length = 512)
   private String avatarUrl;
@@ -81,28 +99,60 @@ public class PetEntity {
     this.breed = breed;
   }
 
-  public Integer getGender() {
+  public Long getCategoryId() {
+    return categoryId;
+  }
+
+  public void setCategoryId(Long categoryId) {
+    this.categoryId = categoryId;
+  }
+
+  public String getCategoryPath() {
+    return categoryPath;
+  }
+
+  public void setCategoryPath(String categoryPath) {
+    this.categoryPath = categoryPath;
+  }
+
+  public String getCustomSpeciesNote() {
+    return customSpeciesNote;
+  }
+
+  public void setCustomSpeciesNote(String customSpeciesNote) {
+    this.customSpeciesNote = customSpeciesNote;
+  }
+
+  public String getGender() {
     return gender;
   }
 
-  public void setGender(Integer gender) {
+  public void setGender(String gender) {
     this.gender = gender;
   }
 
-  public LocalDate getBirthday() {
-    return birthday;
+  public LocalDate getBirthDate() {
+    return birthDate;
   }
 
-  public void setBirthday(LocalDate birthday) {
-    this.birthday = birthday;
+  public void setBirthDate(LocalDate birthDate) {
+    this.birthDate = birthDate;
   }
 
-  public BigDecimal getWeightKg() {
-    return weightKg;
+  public Boolean getNeutered() {
+    return neutered;
   }
 
-  public void setWeightKg(BigDecimal weightKg) {
-    this.weightKg = weightKg;
+  public void setNeutered(Boolean neutered) {
+    this.neutered = neutered;
+  }
+
+  public BigDecimal getCurrentWeight() {
+    return currentWeight;
+  }
+
+  public void setCurrentWeight(BigDecimal currentWeight) {
+    this.currentWeight = currentWeight;
   }
 
   public String getAvatarUrl() {

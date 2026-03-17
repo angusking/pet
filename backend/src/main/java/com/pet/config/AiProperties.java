@@ -14,27 +14,17 @@ public class AiProperties {
   @Setter
   private Integer sessionMaxUserMessages = 5;
 
-  private final Qwen qwen = new Qwen();
+  /**
+   * backend 现在只负责通过 HTTP 调用 AIService。
+   *
+   * <p>旧的 Qwen 直连配置已经移除，避免让人误以为 backend 仍然支持直接连模型。
+   */
   private final AiService aiService = new AiService();
 
   @Getter
   @Setter
-  public static class Qwen {
-    private String apiKey;
-    private String model = "qwen-plus";
-    private String baseUrl;
-    private String systemPromptFile;
-    private Integer maxTokens = 450;
-    private Float temperature = 0.4f;
-    private Float presencePenalty = 0.0f;
-    private Float frequencyPenalty = 0.0f;
-    private String systemPrompt = "你是一位宠物健康与养护助手。回答时先给结论，再给原因和建议。";
-  }
-
-  @Getter
-  @Setter
   public static class AiService {
-    private String baseUrl = "http://localhost:8000";
+    private String baseUrl = "http://localhost:8001";
     private String modelName = "aiservice";
   }
 }

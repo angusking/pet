@@ -51,6 +51,24 @@
   font-family: var(--font-sans);
 }
 
+.auth-card label.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4f463d;
+}
+
+.auth-card label.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.auth-card label.checkbox-row span {
+  line-height: 1.4;
+}
+
 .avatar-block {
   display: grid;
   justify-items: center;

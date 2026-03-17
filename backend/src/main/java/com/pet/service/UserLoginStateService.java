@@ -23,7 +23,10 @@ public class UserLoginStateService {
   private final PetRepository petRepository;
   private final ObjectMapper objectMapper;
 
-  public UserLoginStateService(StringRedisTemplate stringRedisTemplate, PetRepository petRepository, ObjectMapper objectMapper) {
+  public UserLoginStateService(
+      StringRedisTemplate stringRedisTemplate,
+      PetRepository petRepository,
+      ObjectMapper objectMapper) {
     this.stringRedisTemplate = stringRedisTemplate;
     this.petRepository = petRepository;
     this.objectMapper = objectMapper;
@@ -105,9 +108,14 @@ public class UserLoginStateService {
         pet.getId(),
         pet.getName(),
         pet.getBreed(),
+        pet.getCategoryId(),
+        null,
+        pet.getCategoryPath(),
+        pet.getCustomSpeciesNote(),
         pet.getGender(),
-        pet.getBirthday(),
-        pet.getWeightKg(),
+        pet.getBirthDate(),
+        pet.getNeutered(),
+        pet.getCurrentWeight(),
         pet.getAvatarUrl(),
         pet.getIsPrimary() != null && pet.getIsPrimary(),
         List.of()

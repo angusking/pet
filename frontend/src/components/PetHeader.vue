@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <header ref="headerRef" class="home-header">
     <div class="header-top">
       <button class="pet-switch" type="button" @click="toggleDrawer">
@@ -92,7 +92,7 @@ const currentPetId = computed(() => props.currentPet?.id ?? null);
 
 const petLine = (pet) => {
   const breed = pet.breed || "未知品种";
-  const weight = pet.weightKg != null ? `${pet.weightKg}kg` : "--kg";
+  const weight = pet.currentWeight != null ? `${pet.currentWeight}kg` : "--kg";
   return `${breed} · ${weight}`;
 };
 
