@@ -15,7 +15,7 @@ public class AiProperties {
   private Integer sessionMaxUserMessages = 5;
 
   private final Qwen qwen = new Qwen();
-  private final DebugLog debugLog = new DebugLog();
+  private final AiService aiService = new AiService();
 
   @Getter
   @Setter
@@ -33,13 +33,8 @@ public class AiProperties {
 
   @Getter
   @Setter
-  public static class DebugLog {
-    private boolean enabled = true;
-    private String dir = "./AIlog";
-    private int previewLength = 200;
-    private boolean includeFullRequest = false;
-    private boolean includeFullResponse = true;
-    private boolean writeOnSuccess = true;
-    private boolean writeOnError = true;
+  public static class AiService {
+    private String baseUrl = "http://localhost:8000";
+    private String modelName = "aiservice";
   }
 }

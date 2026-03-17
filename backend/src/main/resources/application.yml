@@ -1,9 +1,7 @@
-﻿server:
+server:
   port: 8080
 
 spring:
-  config:
-    import: optional:classpath:application-ai.yml
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/pet?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DB_USER:root}
@@ -39,4 +37,8 @@ app:
     base-dir: ${UPLOAD_BASE_DIR:./uploads}
     public-base: /uploads
   ai:
-    provider: ${AI_PROVIDER:mock}
+    session-max-user-messages: ${AI_SESSION_MAX_USER_MESSAGES:5}
+    provider: ${AI_PROVIDER:aiservice}
+    ai-service:
+      base-url: ${AI_SERVICE_BASE_URL:http://localhost:8001}
+      model-name: ${AI_SERVICE_MODEL_NAME:aiservice}

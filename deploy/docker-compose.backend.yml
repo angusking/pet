@@ -15,16 +15,14 @@ services:
       REDIS_HOST: ${REDIS_HOST:-pet-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       UPLOAD_BASE_DIR: /app/uploads
-      AI_PROVIDER: ${AI_PROVIDER:-qwen}
+      AI_PROVIDER: ${AI_PROVIDER:-aiservice}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
     ports:
       - "8080:8080"
     volumes:
       - ${UPLOADS_DIR:-/srv/pet/uploads}:/app/uploads
-      - ${AI_LOG_DIR:-/srv/pet/AIlog}:/app/AIlog
       - ./config/backend/application.yml:/app/config/application.yml:ro
       - ./config/backend/application-ai.yml:/app/config/application-ai.yml:ro
-      - ./config/backend/prompts:/app/config/prompts:ro
     networks:
       - pet-network
     restart: unless-stopped

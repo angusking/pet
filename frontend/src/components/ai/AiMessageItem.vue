@@ -78,12 +78,16 @@ const parsedAssistant = computed(() => {
   try {
     const obj = JSON.parse(jsonText);
     if (!obj || typeof obj !== "object") return null;
+    const checklist = Array.isArray(obj.checklist) ? obj.checklist.filter(Boolean) : [];
+    const followUps = Array.isArray(obj.followUps) ? obj.followUps : [];
+    const followUpQuestions = Array.isArray(obj.followUpQuestions) ? obj.followUpQuestions : followUps;
+    const actionCards = normalizeActionCards(obj, checklist);
     return {
       intent: typeof obj.intent === "string" ? obj.intent : "UNKNOWN",
       riskLevel: typeof obj.riskLevel === "string" ? obj.riskLevel : "NONE",
       answer: typeof obj.answer === "string" ? obj.answer : "",
-      actionCards: Array.isArray(obj.actionCards) ? obj.actionCards : [],
-      followUpQuestions: Array.isArray(obj.followUpQuestions) ? obj.followUpQuestions : [],
+      actionCards,
+      followUpQuestions: followUpQuestions.filter(Boolean),
       disclaimer: typeof obj.disclaimer === "string" ? obj.disclaimer : "",
     };
   } catch {
@@ -95,7 +99,7 @@ const riskUi = computed(() => {
   const risk = (parsedAssistant.value?.riskLevel || "NONE").toUpperCase();
   const map = {
     HIGH: { key: "high", label: "建议尽快就医" },
-    MEDIUM: { key: "medium", label: "需观察" },
+    MEDIUM: { key: "medium", label: "需要观察" },
     LOW: { key: "low", label: "轻度关注" },
     NONE: { key: "none", label: "通用建议" },
   };
@@ -116,6 +120,32 @@ const intentUi = computed(() => {
   };
   return map[intent] || "未分类";
 });
+
+function normalizeActionCards(obj, checklist) {
+  if (Array.isArray(obj.actionCards)) {
+    return obj.actionCards;
+  }
+  const cards = [];
+  if (checklist.length) {
+    cards.push({
+      title: "建议检查",
+      items: checklist,
+    });
+  }
+  if (Array.isArray(obj.services) && obj.services.length) {
+    cards.push({
+      title: "推荐服务",
+      items: obj.services
+        .map((service) => {
+          if (!service || typeof service !== "object") return "";
+          const parts = [service.name, service.description, service.url].filter(Boolean);
+          return parts.join(" - ");
+        })
+        .filter(Boolean),
+    });
+  }
+  return cards;
+}
 
 function extractJson(text) {
   if (!text) return null;

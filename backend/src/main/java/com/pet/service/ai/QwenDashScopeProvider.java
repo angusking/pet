@@ -33,7 +33,9 @@ public class QwenDashScopeProvider implements AiProvider {
   }
 
   @Override
-  public AiReply generateReply(Long userId, PetEntity pet, String userMessage) {
+  public AiReply generateReply(AiRequest request) {
+    PetEntity pet = request.pet();
+    String userMessage = request.userMessage();
     try {
       GenerationResult result = createGeneration().call(buildParam(pet, userMessage));
       String content = extractContent(result);

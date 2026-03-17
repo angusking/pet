@@ -27,6 +27,7 @@ function Invoke-DockerCommand {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$aiServiceDir = Join-Path $repoRoot "AIService"
 $frontendDir = Join-Path $repoRoot "frontend"
 $backendDir = Join-Path $repoRoot "backend"
 $exportRoot = Join-Path $PSScriptRoot "exports"
@@ -39,15 +40,17 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 
 Write-Host ""
 Write-Host "Select build target:" -ForegroundColor Yellow
-Write-Host "  1) backend"
-Write-Host "  2) frontend"
-Write-Host "  3) both"
-$choice = (Read-Host "Enter option [1/2/3]").Trim()
+Write-Host "  1) aiservice"
+Write-Host "  2) backend"
+Write-Host "  3) frontend"
+Write-Host "  4) all"
+$choice = (Read-Host "Enter option [1/2/3/4]").Trim()
 
 switch ($choice) {
-  "1" { $targets = @("backend") }
-  "2" { $targets = @("frontend") }
-  "3" { $targets = @("backend", "frontend") }
+  "1" { $targets = @("aiservice") }
+  "2" { $targets = @("backend") }
+  "3" { $targets = @("frontend") }
+  "4" { $targets = @("aiservice", "backend", "frontend") }
   default { Fail "Invalid option: $choice" }
 }
 
@@ -59,12 +62,22 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 New-Item -ItemType Directory -Force -Path $exportDir | Out-Null
 
 foreach ($target in $targets) {
-  if ($target -eq "backend") {
-    $contextDir = $backendDir
-    $imageBase = "pet-backend"
-  } else {
-    $contextDir = $frontendDir
-    $imageBase = "pet-frontend"
+  switch ($target) {
+    "aiservice" {
+      $contextDir = $aiServiceDir
+      $imageBase = "pet-aiservice"
+    }
+    "backend" {
+      $contextDir = $backendDir
+      $imageBase = "pet-backend"
+    }
+    "frontend" {
+      $contextDir = $frontendDir
+      $imageBase = "pet-frontend"
+    }
+    default {
+      Fail "Unsupported target: $target"
+    }
   }
 
   if (-not (Test-Path $contextDir)) {

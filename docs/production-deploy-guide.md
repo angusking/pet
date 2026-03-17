@@ -2,10 +2,11 @@
 
 本文基于当前项目的最新部署结构，适用于：
 
-- 前端、后端、MySQL、Redis 独立容器
-- 四个独立 compose 文件
+- 前端、后端、AIService、MySQL、Redis 独立容器
+- 五个独立 compose 文件
 - 前端 Nginx 直接读取宿主机上传目录
-- 后端 AI 提示词文件外挂挂载
+- 后端通过 HTTP 调用独立 AIService
+- AIService 日志写入宿主机 `AIlog` 目录
 
 ## 1. 当前部署文件结构
 
@@ -13,16 +14,17 @@
 
 - `docker-compose.mysql.yml`
 - `docker-compose.redis.yml`
+- `docker-compose.aiservice.yml`
 - `docker-compose.backend.yml`
 - `docker-compose.frontend.yml`
 - `.env`
 - `.env.example`
 - `env/mysql.env`
+- `env/aiservice.env`
 - `env/backend.env`
 - `env/frontend.env`
 - `config/backend/application.yml`
 - `config/backend/application-ai.yml`
-- `config/backend/prompts/ai-system-prompt-v2.md`
 - `config/frontend/nginx.conf`
 
 ## 2. 服务拆分与更新原则
@@ -31,13 +33,14 @@
 
 - MySQL：`docker-compose.mysql.yml`
 - Redis：`docker-compose.redis.yml`
+- AIService：`docker-compose.aiservice.yml`
 - Backend：`docker-compose.backend.yml`
 - Frontend：`docker-compose.frontend.yml`
 
 更新原则：
 
-- 更新前后端时，不重启 MySQL / Redis
-- 只执行前后端 compose 文件
+- 更新 AIService、前后端时，不重启 MySQL / Redis
+- 只执行对应服务的 compose 文件
 
 ## 3. 首次部署准备
 
@@ -69,6 +72,7 @@ docker network create pet-network
 
 重点项：
 
+- `AISERVICE_IMAGE`
 - `BACKEND_IMAGE`
 - `FRONTEND_IMAGE`
 - `MYSQL_DATA_DIR`
@@ -79,34 +83,50 @@ docker network create pet-network
 
 建议每次发版只改镜像 tag。
 
-### 4.2 后端环境（`deploy/env/backend.env`）
+### 4.2 AIService 环境（`deploy/env/aiservice.env`）
+
+重点项：
+
+- `DASHSCOPE_API_KEY`
+- `AI_LOG_DIR`
+- `SYSTEM_PROMPT_FILE`
+
+### 4.3 后端环境（`deploy/env/backend.env`）
 
 重点项：
 
 - `JWT_SECRET`
-- `DASHSCOPE_API_KEY`
 - `AI_PROVIDER`
-- `QWEN_SYSTEM_PROMPT_FILE=/app/config/prompts/ai-system-prompt-v2.md`
+- `AI_SERVICE_BASE_URL`
 - `MAX_FILE_SIZE=20MB`
 - `MAX_REQUEST_SIZE=25MB`
 
-### 4.3 前端环境（`deploy/env/frontend.env`）
+### 4.4 前端环境（`deploy/env/frontend.env`）
 
 重点项：
 
 - `BACKEND_UPSTREAM=http://pet-backend:8080`
 - `CLIENT_MAX_BODY_SIZE=25m`
 
-### 4.4 AI 提示词外挂文件
+### 4.5 AIService 上游地址
 
-当前已通过后端 compose 挂载：
+后端通过环境变量配置 AIService 地址：
 
-- 宿主机（deploy 相对路径）：`./config/backend/prompts`
-- 容器内路径：`/app/config/prompts`
+- `AI_SERVICE_BASE_URL`
 
-后端从以下路径读取提示词：
+容器部署下建议使用同一 docker 网络中的服务名，例如：
 
-- `/app/config/prompts/ai-system-prompt-v2.md`
+- `http://pet-aiservice:8001`
+
+### 4.6 AIService 日志目录
+
+AIService 日志写入容器内：
+
+- `/app/AIlog`
+
+并挂载到宿主机：
+
+- `${AI_LOG_DIR}`，默认 `/srv/pet/AIlog`
 
 ## 5. 上传文件链路（当前方案）
 
@@ -146,26 +166,31 @@ docker network create pet-network
 ```bash
 docker compose -f docker-compose.mysql.yml up -d
 docker compose -f docker-compose.redis.yml up -d
+docker compose -f docker-compose.aiservice.yml up -d
 docker compose -f docker-compose.backend.yml up -d
 docker compose -f docker-compose.frontend.yml up -d
 ```
 
-## 8. 更新前后端（不重启 MySQL / Redis）
+## 8. 更新 AIService / 前后端（不重启 MySQL / Redis）
 
 ```bash
+docker compose -f docker-compose.aiservice.yml pull
 docker compose -f docker-compose.backend.yml pull
 docker compose -f docker-compose.frontend.yml pull
+docker compose -f docker-compose.aiservice.yml up -d
 docker compose -f docker-compose.backend.yml up -d
 docker compose -f docker-compose.frontend.yml up -d
 ```
 
-## 9. 你当前常用的离线发布方式（无镜像仓库）
+## 9. 常用离线发布方式（无镜像仓库）
 
 本地构建并导出：
 
 ```bash
+docker build -t pet-aiservice:v1 ./AIService
 docker build -t pet-backend:v1 ./backend
 docker build -t pet-frontend:v1 ./frontend
+docker save -o pet-aiservice-v1.tar pet-aiservice:v1
 docker save -o pet-backend-v1.tar pet-backend:v1
 docker save -o pet-frontend-v1.tar pet-frontend:v1
 ```
@@ -173,12 +198,14 @@ docker save -o pet-frontend-v1.tar pet-frontend:v1
 上传到服务器后导入：
 
 ```bash
+docker load -i /srv/pet/pet-aiservice-v1.tar
 docker load -i /srv/pet/pet-backend-v1.tar
 docker load -i /srv/pet/pet-frontend-v1.tar
 ```
 
 然后更新 `deploy/.env`：
 
+- `AISERVICE_IMAGE=pet-aiservice:v1`
 - `BACKEND_IMAGE=pet-backend:v1`
 - `FRONTEND_IMAGE=pet-frontend:v1`
 
@@ -196,6 +223,7 @@ docker ps
 
 - `pet-mysql`
 - `pet-redis`
+- `pet-aiservice`
 - `pet-backend`
 - `pet-frontend`
 
@@ -218,11 +246,15 @@ echo hello-upload > /srv/pet/uploads/test.txt
 curl -i http://127.0.0.1/uploads/test.txt
 ```
 
-### 10.5 AI 提示词挂载验证
+### 10.5 AIService 连通性验证
+
+确认后端配置的 `AI_SERVICE_BASE_URL` 可访问，并检查后端 AI 对话接口是否正常返回。
+
+### 10.6 AIService 日志验证
 
 ```bash
-docker exec -it pet-backend ls -l /app/config/prompts/ai-system-prompt-v2.md
-docker exec -it pet-backend sh -c 'head -n 5 /app/config/prompts/ai-system-prompt-v2.md'
+ls -l /srv/pet/AIlog
+find /srv/pet/AIlog -maxdepth 2 -type f | tail -n 20
 ```
 
 ## 11. 常见问题排查

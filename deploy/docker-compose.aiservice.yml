@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  aiservice:
+    image: ${AISERVICE_IMAGE:-pet-aiservice:latest}
+    container_name: pet-aiservice
+    env_file:
+      - ./env/aiservice.env
+    environment:
+      TZ: Asia/Shanghai
+      APP_ENV: ${APP_ENV:-prod}
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8001
+      REDIS_HOST: ${REDIS_HOST:-pet-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      AI_LOG_DIR: /app/AIlog
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${AI_LOG_DIR:-/srv/pet/AIlog}:/app/AIlog
+    networks:
+      - pet-network
+    restart: unless-stopped
+
+networks:
+  pet-network:
+    name: pet-network
+    external: true

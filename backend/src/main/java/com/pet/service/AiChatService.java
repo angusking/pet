@@ -12,9 +12,7 @@ import com.pet.api.error.BusinessException;
 import com.pet.config.AiProperties;
 import com.pet.entity.PetEntity;
 import com.pet.repository.PetRepository;
-import com.pet.service.ai.AiDebugLogWriter;
 import com.pet.service.ai.AiProvider;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,18 +31,15 @@ public class AiChatService {
   private final PetRepository petRepository;
   private final AiProvider aiProvider;
   private final AiProperties aiProperties;
-  private final AiDebugLogWriter aiDebugLogWriter;
 
   private final AtomicLong sessionIdGen = new AtomicLong(1);
   private final AtomicLong messageIdGen = new AtomicLong(1);
   private final Map<Long, Map<Long, SessionState>> storeByUser = new ConcurrentHashMap<>();
 
-  public AiChatService(PetRepository petRepository, AiProvider aiProvider, AiProperties aiProperties,
-      AiDebugLogWriter aiDebugLogWriter) {
+  public AiChatService(PetRepository petRepository, AiProvider aiProvider, AiProperties aiProperties) {
     this.petRepository = petRepository;
     this.aiProvider = aiProvider;
     this.aiProperties = aiProperties;
-    this.aiDebugLogWriter = aiDebugLogWriter;
   }
 
   public List<AiChatSessionResponse> listSessions(Long userId) {
@@ -73,8 +68,8 @@ public class AiChatService {
   public List<AiChatMessageResponse> listMessages(Long userId, Long sessionId) {
     SessionState session = requireSession(userId, sessionId);
     List<AiChatMessageResponse> result = new ArrayList<>();
-    for (MessageState m : session.messages) {
-      result.add(toMessageResponse(m));
+    for (MessageState message : session.messages) {
+      result.add(toMessageResponse(message));
     }
     return result;
   }
@@ -94,31 +89,19 @@ public class AiChatService {
     String content = request.content().trim();
     LocalDateTime now = LocalDateTime.now();
     String traceId = buildTraceId();
+    List<AiProvider.ChatMessage> recentMessages = buildRecentMessages(session.messages);
 
     MessageState userMsg = new MessageState(messageIdGen.getAndIncrement(), sessionId, "user", content, null, null, now);
     session.messages.add(userMsg);
 
     PetEntity pet = session.petId == null ? null : petRepository.findByIdAndUserId(session.petId, userId).orElse(null);
-    long startedNs = System.nanoTime();
-    AiProvider.AiReply reply;
-    try {
-      reply = aiProvider.generateReply(userId, pet, content);
-    } catch (RuntimeException ex) {
-      long latencyMs = Duration.ofNanos(System.nanoTime() - startedNs).toMillis();
-      aiDebugLogWriter.writeError(
-          traceId,
-          userId,
-          sessionId,
-          pet,
-          aiProperties.getProvider(),
-          resolveModelName(),
-          content,
-          buildSystemPromptPreview(pet),
-          latencyMs,
-          ex);
-      throw ex;
-    }
-    long latencyMs = Duration.ofNanos(System.nanoTime() - startedNs).toMillis();
+    AiProvider.AiReply reply = aiProvider.generateReply(new AiProvider.AiRequest(
+        traceId,
+        String.valueOf(sessionId),
+        userId,
+        pet,
+        content,
+        recentMessages));
 
     MessageState aiMsg = new MessageState(
         messageIdGen.getAndIncrement(),
@@ -136,18 +119,6 @@ public class AiChatService {
       session.title = content.length() > 12 ? content.substring(0, 12) + "..." : content;
     }
 
-    aiDebugLogWriter.writeSuccess(
-        traceId,
-        userId,
-        sessionId,
-        pet,
-        aiProperties.getProvider(),
-        reply.model() == null ? resolveModelName() : reply.model(),
-        content,
-        buildSystemPromptPreview(pet),
-        reply,
-        latencyMs);
-
     return new AiChatSendMessageResponse(toSessionResponse(session), toMessageResponse(userMsg), toMessageResponse(aiMsg));
   }
 
@@ -157,7 +128,7 @@ public class AiChatService {
       return;
     }
     long userMsgCount = session.messages.stream()
-        .filter(m -> "user".equals(m.role()))
+        .filter(message -> "user".equals(message.role()))
         .count();
     if (userMsgCount >= max) {
       throw new BusinessException(ApiError.AI_CHAT_LIMIT_REACHED, HttpStatus.BAD_REQUEST);
@@ -203,20 +174,17 @@ public class AiChatService {
     return new AiPetContextResponse(pet.getId(), pet.getName(), pet.getBreed(), pet.getAvatarUrl());
   }
 
-  private String resolveModelName() {
-    return aiProperties.getQwen() == null ? null : aiProperties.getQwen().getModel();
-  }
-
-  private String buildSystemPromptPreview(PetEntity pet) {
-    String base = aiProperties.getQwen() == null ? null : aiProperties.getQwen().getSystemPrompt();
-    if (base == null) {
-      return null;
+  private List<AiProvider.ChatMessage> buildRecentMessages(List<MessageState> messages) {
+    if (messages == null || messages.isEmpty()) {
+      return List.of();
     }
-    if (pet == null) {
-      return base + " 当前未关联宠物。";
+    int fromIndex = Math.max(0, messages.size() - 8);
+    List<AiProvider.ChatMessage> recentMessages = new ArrayList<>();
+    for (int i = fromIndex; i < messages.size(); i++) {
+      MessageState message = messages.get(i);
+      recentMessages.add(new AiProvider.ChatMessage(message.role(), message.content()));
     }
-    return base + " 当前宠物：" + (pet.getName() == null ? "未知" : pet.getName())
-        + " / " + (pet.getBreed() == null ? "未知品种" : pet.getBreed());
+    return recentMessages;
   }
 
   private String buildTraceId() {
