@@ -1,20 +1,4 @@
-"""聊天编排器。
-
-这是 AIService 的核心模块。
-它负责把一次聊天请求串成完整流程，而不是只做单一能力。
-
-当前流程大致是：
-1. 取短期记忆
-2. 重写问题
-3. RAG 检索
-4. 工具调用
-5. 拼 Prompt
-6. 调大模型
-7. 解析结果
-8. 安全校验
-9. 写回短期记忆
-10. 记录日志
-"""
+"""聊天编排入口。"""
 
 import json
 from time import perf_counter
@@ -28,6 +12,7 @@ from ai_service.core.settings import Settings
 from ai_service.observability.log_service import LogService
 from ai_service.prompts.prompt_builder import PromptBuilder
 from ai_service.providers.llm.qwen_provider import QwenProvider
+from ai_service.providers.memory.backend_history_provider import BackendHistoryProvider
 from ai_service.providers.memory.base import MemoryProvider
 from ai_service.schemas.chat_request import ChatRequest
 from ai_service.schemas.chat_response import ChatResponse, RiskLevel
@@ -37,7 +22,7 @@ logger = get_logger(__name__)
 
 
 class ChatOrchestrator:
-    """负责一次 AI 聊天请求的完整业务编排。"""
+    """负责一次 AI 聊天请求的完整编排。"""
 
     def __init__(self, settings: Settings, memory_provider: MemoryProvider) -> None:
         self._settings = settings
@@ -45,6 +30,10 @@ class ChatOrchestrator:
             memory_provider=memory_provider,
             max_messages=settings.memory_max_messages,
             ttl_seconds=settings.memory_ttl_seconds,
+            backend_history_provider=BackendHistoryProvider(
+                base_url=settings.backend_base_url,
+                timeout_seconds=settings.backend_timeout_seconds,
+            ),
         )
         self._prompt_builder = PromptBuilder(settings=settings)
         self._llm_provider = QwenProvider(settings=settings)
@@ -55,7 +44,7 @@ class ChatOrchestrator:
         self._log_service = LogService(settings.log_dir)
 
     async def handle(self, request: ChatRequest) -> ChatResponse:
-        """执行一次完整聊天流程。"""
+        """执行完整的聊天处理流程。"""
         started = perf_counter()
         used_rewrite = False
         used_rag = False
@@ -64,11 +53,11 @@ class ChatOrchestrator:
         memory_source = "empty"
 
         try:
-            # 第一步先决定“这轮对话到底用什么上下文”。
-            # 第一阶段规则是：
-            # Redis 优先，backend recentMessages 兜底。
+            # 上下文恢复顺序保持稳定：
+            # Redis 优先，请求里的 recentMessages 第二，backend 内部接口第三。
             context_messages, memory_source = await self._memory_service.load_memory(
                 request.conversationId,
+                user_id=request.userId,
                 fallback_messages=[message.model_dump() for message in request.recentMessages],
             )
 
@@ -102,7 +91,7 @@ class ChatOrchestrator:
 
             response = self._safety_service.enforce(response=response, original_query=request.message)
 
-            # 只有本轮真正成功产出了 assistant answer，才把这一轮写进 Redis。
+            # 只有拿到有效 assistant 回复后，才把这一轮写回短期记忆。
             await self._memory_service.save_memory(
                 conversation_id=request.conversationId,
                 user_message=request.message,
@@ -147,11 +136,7 @@ class ChatOrchestrator:
             )
 
     def _parse_llm_output(self, request_id: str, content: str) -> ChatResponse:
-        """把大模型文本输出解析成标准响应。
-
-        这里做兜底是因为模型不一定总能严格按 JSON 输出。
-        即使失败，也要尽量返回一个前端能消费的结构。
-        """
+        """把模型输出解析成稳定的响应结构。"""
         try:
             data = json.loads(content)
             return ChatResponse(

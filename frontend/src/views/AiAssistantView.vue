@@ -1,7 +1,7 @@
 <template>
   <div class="ai-page">
     <div class="ai-layout">
-      <AiChatHeader @new-chat="createNewChat" />
+      <AiChatHeader @new-chat="createNewChat" @toggle-history="toggleHistoryDrawer" />
       <PetContextBar :pet="petContext" @clear="clearPetContext" @switch="togglePetPicker" />
 
       <section v-if="petPickerOpen" class="ai-pet-picker">
@@ -36,23 +36,35 @@
         <p v-if="petSwitchError" class="error">{{ petSwitchError }}</p>
       </section>
 
-      <section class="ai-chat-shell">
-        <aside class="ai-session-list">
-          <div class="session-title">对话历史</div>
-          <button
-            v-for="s in sessions"
-            :key="s.id"
-            type="button"
-            class="session-item"
-            :class="{ active: currentSessionId === s.id }"
-            @click="selectSession(s.id)"
-          >
-            <div class="name">{{ s.title || "新对话" }}</div>
-            <div class="sub">{{ s.lastMessagePreview || "暂无消息" }}</div>
-          </button>
-          <p v-if="!sessions.length" class="muted">暂无会话</p>
+      <Teleport to="body">
+        <div
+          v-if="historyDrawerOpen"
+          class="ai-history-overlay"
+          @click="closeHistoryDrawer"
+        ></div>
+        <aside class="ai-history-drawer" :class="{ open: historyDrawerOpen }" aria-label="对话历史">
+          <div class="drawer-head">
+            <strong>对话历史</strong>
+            <button type="button" class="ghost-btn" @click="closeHistoryDrawer">关闭</button>
+          </div>
+          <div class="drawer-list">
+            <button
+              v-for="s in sessions"
+              :key="s.id"
+              type="button"
+              class="session-item"
+              :class="{ active: currentSessionId === s.id }"
+              @click="selectSession(s.id)"
+            >
+              <div class="name">{{ s.title || "新对话" }}</div>
+              <div class="sub">{{ formatSessionStartTime(s.createdAt) }}</div>
+            </button>
+            <p v-if="!sessions.length" class="muted">暂无会话</p>
+          </div>
         </aside>
+      </Teleport>
 
+      <section class="ai-chat-shell">
         <section class="ai-main-panel">
           <AiMessageList
             :messages="messages"
@@ -82,6 +94,7 @@ const myPets = ref([]);
 const petPickerOpen = ref(false);
 const petSwitching = ref(false);
 const petSwitchError = ref("");
+const historyDrawerOpen = ref(false);
 const sessions = ref([]);
 const currentSessionId = ref(null);
 const messages = ref([]);
@@ -120,6 +133,24 @@ const loadSessions = async () => {
   sessions.value = (await aiApi.listChats()) || [];
 };
 
+const formatSessionStartTime = (value) => {
+  if (!value) {
+    return "刚刚发起";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "刚刚发起";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes} 发起`;
+};
+
 const createNewChat = async () => {
   const session = await aiApi.createChat({
     petId: petContext.value?.id ?? null,
@@ -128,11 +159,13 @@ const createNewChat = async () => {
   await loadSessions();
   currentSessionId.value = session.id;
   messages.value = [];
+  historyDrawerOpen.value = false;
 };
 
 const selectSession = async (sessionId) => {
   if (!sessionId) return;
   currentSessionId.value = sessionId;
+  historyDrawerOpen.value = false;
   messageLoading.value = true;
   messageError.value = "";
   try {
@@ -176,6 +209,14 @@ const useSuggestion = (text) => {
 const togglePetPicker = () => {
   petSwitchError.value = "";
   petPickerOpen.value = !petPickerOpen.value;
+};
+
+const toggleHistoryDrawer = () => {
+  historyDrawerOpen.value = !historyDrawerOpen.value;
+};
+
+const closeHistoryDrawer = () => {
+  historyDrawerOpen.value = false;
 };
 
 const clearPetContext = async () => {

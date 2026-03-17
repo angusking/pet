@@ -48,7 +48,7 @@
       </template>
 
       <template v-else>
-        <div class="content">{{ message.content }}</div>
+        <div class="content plain-answer">{{ message.content }}</div>
       </template>
 
       <div class="meta">

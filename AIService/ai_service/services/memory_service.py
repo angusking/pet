@@ -1,34 +1,44 @@
 """短期记忆服务。
 
-这个 service 位于：
-编排器 <-> 记忆服务 <-> Redis Provider
-
-它的职责不是直接操作 Redis，而是把“聊天记忆规则”集中写在这里。
-这样以后改窗口大小、兜底策略、去重策略时，只改这一层就够了。
+这一层专门负责“短期记忆的使用规则”，而不是直接操作 Redis：
+- 优先读 Redis
+- Redis miss 时先用请求里的 recentMessages
+- 两者都没有时，再尝试回源 backend 内部接口
+- 写回前统一裁剪窗口，避免上下文无限膨胀
 """
 
+from ai_service.providers.memory.backend_history_provider import BackendHistoryProvider
 from ai_service.providers.memory.base import MemoryProvider
 
 
 class MemoryService:
-    """对话短期记忆服务。"""
+    """管理多轮对话的短期记忆。"""
 
-    def __init__(self, memory_provider: MemoryProvider, max_messages: int, ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        memory_provider: MemoryProvider,
+        max_messages: int,
+        ttl_seconds: int,
+        backend_history_provider: BackendHistoryProvider | None = None,
+    ) -> None:
         self._memory_provider = memory_provider
         self._max_messages = max_messages
         self._ttl_seconds = ttl_seconds
+        self._backend_history_provider = backend_history_provider
 
-    async def load_memory(self, conversation_id: str, fallback_messages: list[dict] | None = None) -> tuple[list[dict], str]:
-        """读取上下文消息。
+    async def load_memory(
+        self,
+        conversation_id: str,
+        user_id: int,
+        fallback_messages: list[dict] | None = None,
+    ) -> tuple[list[dict], str]:
+        """读取可用于本轮 prompt 的上下文消息，并返回来源标记。
 
-        第一阶段策略：
-        1. 优先使用 Redis 里的短期记忆
-        2. Redis miss 时，使用 backend 传来的 recentMessages 兜底
-        3. 如果用了兜底消息，则顺手回写到 Redis，方便下一轮直接命中
-
-        返回值：
-        - 第一个值：真正要参与 prompt 的上下文消息
-        - 第二个值：上下文来源，便于日志排查
+        当前优先级：
+        1. Redis 短期记忆
+        2. 请求中携带的 recentMessages
+        3. backend 内部 recent-messages 接口
+        4. 空上下文
         """
         redis_messages = self._clip_messages(await self._memory_provider.load_messages(conversation_id))
         if redis_messages:
@@ -43,17 +53,26 @@ class MemoryService:
             )
             return normalized_fallback, "fallback"
 
+        if self._backend_history_provider is not None:
+            backend_messages = self._clip_messages(
+                await self._backend_history_provider.load_recent_messages(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    limit=self._max_messages,
+                )
+            )
+            if backend_messages:
+                await self._memory_provider.save_messages(
+                    conversation_id=conversation_id,
+                    messages=backend_messages,
+                    ttl_seconds=self._ttl_seconds,
+                )
+                return backend_messages, "backend"
+
         return [], "empty"
 
     async def save_memory(self, conversation_id: str, user_message: str, assistant_message: str) -> None:
-        """保存一轮成功对话。
-
-        这里明确采用“成对写入”：
-        - user message
-        - assistant message
-
-        这样可以避免只写进去半轮失败消息，污染后续上下文。
-        """
+        """把一轮成功对话按 user/assistant 成对写回短期记忆。"""
         current_messages = self._clip_messages(await self._memory_provider.load_messages(conversation_id))
         current_messages.extend(
             [
@@ -68,12 +87,7 @@ class MemoryService:
         )
 
     def _clip_messages(self, messages: list[dict]) -> list[dict]:
-        """清洗并裁剪消息窗口。
-
-        这里做两件事：
-        - 丢掉结构不完整的消息
-        - 只保留最近 N 条，防止上下文无限膨胀
-        """
+        """清洗非法消息，并只保留最近 N 条。"""
         normalized = [
             {
                 "role": str(message.get("role", "")).strip(),
