@@ -1,4 +1,8 @@
-"""聊天响应模型。"""
+"""聊天响应模型。
+
+这个响应结构是前端和 backend 稳定依赖的契约，
+所以字段命名要尽量长期稳定。
+"""
 
 from enum import Enum
 
@@ -8,7 +12,10 @@ from ai_service.schemas.common import ServiceItem
 
 
 class RiskLevel(str, Enum):
-    """风险等级枚举。"""
+    """风险等级枚举。
+
+    这里统一用 low / medium / high，避免多处各写一套值。
+    """
 
     LOW = "low"
     MEDIUM = "medium"

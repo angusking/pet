@@ -1,7 +1,7 @@
 """Prompt 构建器。
 
-该模块把不同来源的上下文数据统一拼装成 LLM 所需的 messages，
-从而确保 Prompt 逻辑不散落在多个业务文件中。
+这个模块专门负责把不同来源的上下文统一拼装成 LLM 需要的 messages。
+这样 Prompt 逻辑不会散落在 orchestrator、tool、rag 等多个模块里。
 """
 
 from pathlib import Path
@@ -19,16 +19,23 @@ class PromptBuilder:
     def build_messages(
         self,
         request: ChatRequest,
-        memory_messages: list[dict],
+        context_messages: list[dict],
         rewritten_query: str,
         rag_context: str | None,
         tool_result: dict | None,
     ) -> list[dict[str, str]]:
-        """构建传递给大模型的消息列表。"""
+        """构建传递给大模型的消息列表。
+
+        这里的 `context_messages` 已经是“最终选中的短期上下文”：
+        - 可能来自 Redis
+        - 也可能来自 backend 传入的 recentMessages 兜底
+
+        PromptBuilder 不关心它从哪里来，只负责按顺序组装。
+        """
         system_prompt = self._load_system_prompt()
 
         # 这里把结构化上下文压成一段文本，是为了兼容当前最通用的 chat 接口模式。
-        # 后续如果要升级为更细粒度的多消息结构，也可以在这里统一调整。
+        # 后续如果要升级为更细粒度的多消息结构，也只需要改这里。
         user_context_lines = [
             f"requestId: {request.requestId}",
             f"conversationId: {request.conversationId}",
@@ -57,8 +64,10 @@ class PromptBuilder:
         if tool_result:
             user_context_lines.append(f"toolResult: {tool_result}")
 
+        # 最终顺序非常重要：
+        # system -> 短期记忆 -> 当前问题上下文
         messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-        messages.extend(memory_messages)
+        messages.extend(context_messages)
         messages.append({"role": "user", "content": "\n".join(user_context_lines)})
         return messages
 

@@ -1,4 +1,13 @@
-"""记忆存储抽象接口。"""
+"""记忆存储抽象接口。
+
+Provider 层只关心“怎么存”和“怎么取”。
+它不关心：
+- Redis 优先还是 fallback 优先
+- 保留多少条
+- 什么时候写入
+
+这些规则由 MemoryService 负责。
+"""
 
 from abc import ABC, abstractmethod
 

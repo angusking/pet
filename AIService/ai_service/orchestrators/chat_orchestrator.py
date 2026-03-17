@@ -1,7 +1,19 @@
 """聊天编排器。
 
-这是整个 AIService 的核心模块，负责把一次聊天请求串成完整流程。
-它不关心 HTTP 协议细节，而只负责把输入安全、稳定地转换成结构化输出。
+这是 AIService 的核心模块。
+它负责把一次聊天请求串成完整流程，而不是只做单一能力。
+
+当前流程大致是：
+1. 取短期记忆
+2. 重写问题
+3. RAG 检索
+4. 工具调用
+5. 拼 Prompt
+6. 调大模型
+7. 解析结果
+8. 安全校验
+9. 写回短期记忆
+10. 记录日志
 """
 
 import json
@@ -49,53 +61,48 @@ class ChatOrchestrator:
         used_rag = False
         used_tool = False
         model_name = self._settings.qwen_model
+        memory_source = "empty"
 
         try:
-            # 1. 读取短期记忆，作为多轮对话上下文的补充。
-            memory_messages = await self._memory_service.load_memory(request.conversationId)
+            # 第一步先决定“这轮对话到底用什么上下文”。
+            # 第一阶段规则是：
+            # Redis 优先，backend recentMessages 兜底。
+            context_messages, memory_source = await self._memory_service.load_memory(
+                request.conversationId,
+                fallback_messages=[message.model_dump() for message in request.recentMessages],
+            )
 
-            # 2. 问题重写。
-            # V1 中采用最保守策略，大部分情况下直接返回原问题，
-            # 但仍然保留独立模块，方便后续升级。
             rewritten_query = self._rewrite_service.rewrite(request.message)
             used_rewrite = rewritten_query != request.message
 
-            # 3. RAG 检索。
-            # V1 暂不接知识库，这里保留标准扩展位。
             rag_context = await self._rag_service.retrieve(rewritten_query)
             used_rag = bool(rag_context)
 
-            # 4. 工具调用。
-            # 当前只实现了一个轻量级的体重分析工具作为示例。
             tool_result = await self._tool_service.invoke_if_needed(
                 query=rewritten_query,
                 biz_data=request.bizData.model_dump() if request.bizData else None,
             )
             used_tool = bool(tool_result)
 
-            # 5. 构建 Prompt。
             messages = self._prompt_builder.build_messages(
                 request=request,
-                memory_messages=memory_messages,
+                context_messages=context_messages,
                 rewritten_query=rewritten_query,
                 rag_context=rag_context,
                 tool_result=tool_result,
             )
 
-            # 6. 调用大模型。
             llm_result = self._llm_provider.chat(messages)
             model_name = llm_result.get("model", model_name)
 
-            # 7. 解析模型输出，统一收敛成 ChatResponse。
             response = self._parse_llm_output(
                 request_id=request.requestId,
                 content=llm_result.get("content", ""),
             )
 
-            # 8. 安全校验。
             response = self._safety_service.enforce(response=response, original_query=request.message)
 
-            # 9. 保存本轮会话记忆。
+            # 只有本轮真正成功产出了 assistant answer，才把这一轮写进 Redis。
             await self._memory_service.save_memory(
                 conversation_id=request.conversationId,
                 user_message=request.message,
@@ -108,7 +115,11 @@ class ChatOrchestrator:
                 response=response,
                 model=model_name,
                 latency_ms=latency_ms,
-                usage=llm_result.get("usage", {}),
+                usage={
+                    **llm_result.get("usage", {}),
+                    "memorySource": memory_source,
+                    "contextMessageCount": len(context_messages),
+                },
                 used_rewrite=used_rewrite,
                 used_rag=used_rag,
                 used_tool=used_tool,
@@ -121,7 +132,7 @@ class ChatOrchestrator:
                 request=request,
                 model=model_name,
                 latency_ms=latency_ms,
-                error=str(exc),
+                error=f"memorySource={memory_source}; error={exc}",
                 used_rewrite=used_rewrite,
                 used_rag=used_rag,
                 used_tool=used_tool,
@@ -136,7 +147,11 @@ class ChatOrchestrator:
             )
 
     def _parse_llm_output(self, request_id: str, content: str) -> ChatResponse:
-        """把大模型文本输出解析成标准响应。"""
+        """把大模型文本输出解析成标准响应。
+
+        这里做兜底是因为模型不一定总能严格按 JSON 输出。
+        即使失败，也要尽量返回一个前端能消费的结构。
+        """
         try:
             data = json.loads(content)
             return ChatResponse(
@@ -152,8 +167,6 @@ class ChatOrchestrator:
                 ),
             )
         except Exception:
-            # 如果模型没有按要求输出 JSON，这里走兜底逻辑，
-            # 这样上游系统仍然能拿到一个可消费的结构化响应。
             logger.warning("llm output is not valid json, fallback to plain answer")
             return ChatResponse(
                 requestId=request_id,

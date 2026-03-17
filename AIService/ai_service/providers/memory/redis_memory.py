@@ -1,4 +1,13 @@
-"""Redis 短期记忆实现。"""
+"""Redis 短期记忆实现。
+
+这一层只做“存取”，不做业务规则判断。
+例如：
+- 不决定优先用 Redis 还是 fallback
+- 不决定窗口大小
+- 不决定失败时要不要写入
+
+这些规则全部放在 MemoryService。
+"""
 
 import json
 
@@ -40,8 +49,11 @@ class RedisMemoryProvider(MemoryProvider):
     async def save_messages(self, conversation_id: str, messages: list[dict], ttl_seconds: int) -> None:
         """保存裁剪后的消息列表。
 
-        当前实现采用覆盖式写入，优点是逻辑非常清晰，
-        并且便于保证 Redis 中的数据始终处于受控状态。
+        这里采用“整段覆盖”而不是增量 append。
+        好处是逻辑更直观：
+        - Redis 里的内容永远就是当前最终窗口
+        - 不需要再额外 trim
+        - 出问题时更容易排查
         """
         assert self._redis is not None
         key = self._build_key(conversation_id)
@@ -50,6 +62,7 @@ class RedisMemoryProvider(MemoryProvider):
             await pipe.delete(key)
             if payload:
                 await pipe.rpush(key, *payload)
+            # 每次写入都刷新 TTL，表示“这个会话最近仍然活跃”。
             await pipe.expire(key, ttl_seconds)
             await pipe.execute()
 

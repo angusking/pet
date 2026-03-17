@@ -1,4 +1,11 @@
-"""AI 调用日志服务。"""
+"""AI 调用日志服务。
+
+这里记录的是“单次对话调用日志”，不是普通应用日志。
+之所以单独做成文件，是为了：
+- 和控制台日志分开
+- 更容易按一次调用排查问题
+- 对齐仓库现有 `AIlog/YYYY-MM-DD/*.txt` 的存储习惯
+"""
 
 import json
 from datetime import datetime
@@ -84,6 +91,11 @@ class LogService:
         usage: dict,
         error: str | None,
     ) -> str:
+        """把本次调用拼成可读的调试文本。
+
+        这里刻意采用“分段文本”而不是纯 JSON，
+        因为人工排查问题时通常先看大段结构，再决定是否需要机器解析。
+        """
         sections: list[str] = [
             "=== AI CALL DEBUG LOG ===",
             f"time={now.isoformat()}",
@@ -153,22 +165,27 @@ class LogService:
         return "\n".join(sections)
 
     def _write_file(self, now: datetime, trace_id: str, suffix: str, content: str) -> None:
+        """按日期目录写入单次调用文件。"""
         date_dir = self._base_dir / now.strftime("%Y-%m-%d")
         date_dir.mkdir(parents=True, exist_ok=True)
         file_name = f"{now.strftime('%Y%m%d-%H%M%S-%f')[:-3]}_{self._sanitize(trace_id)}_{suffix}.txt"
         (date_dir / file_name).write_text(content, encoding="utf-8")
 
     def _sanitize(self, value: str) -> str:
+        """把 traceId 转成适合文件名的形式。"""
         return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value)
 
     def _preview(self, value: str | None, max_len: int = 500) -> str:
+        """生成适合日志首屏查看的短预览。"""
         if not value:
             return "null"
         normalized = value.replace("\r", "\\r").replace("\n", "\\n")
         return normalized if len(normalized) <= max_len else normalized[:max_len] + "..."
 
     def _dump_recent_messages(self, request: ChatRequest) -> str:
+        """把 recentMessages 转成 JSON 文本，便于写入日志。"""
         return self._as_json([message.model_dump() for message in request.recentMessages])
 
     def _as_json(self, payload: object) -> str:
+        """统一使用 UTF-8 友好的 JSON 文本。"""
         return json.dumps(payload, ensure_ascii=False)
