@@ -9,6 +9,7 @@ public enum ApiError {
   INVALID_CREDENTIALS(2001, "用户名或密码错误"),
   USER_NOT_FOUND(2002, "用户不存在"),
   PET_NOT_FOUND(2003, "宠物不存在"),
+  PET_WEIGHT_RECORD_NOT_FOUND(2004, "宠物体重记录不存在"),
 
   FILE_REQUIRED(3000, "请选择要上传的文件"),
   UPLOAD_FAILED(3001, "上传失败"),

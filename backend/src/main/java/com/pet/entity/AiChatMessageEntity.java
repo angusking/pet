@@ -39,6 +39,9 @@ public class AiChatMessageEntity {
   @Column(nullable = false, columnDefinition = "TEXT")
   private String content;
 
+  @Column(name = "structured_payload", columnDefinition = "LONGTEXT")
+  private String structuredPayload;
+
   @Column(length = 50)
   private String model;
 
@@ -93,6 +96,14 @@ public class AiChatMessageEntity {
 
   public void setContent(String content) {
     this.content = content;
+  }
+
+  public String getStructuredPayload() {
+    return structuredPayload;
+  }
+
+  public void setStructuredPayload(String structuredPayload) {
+    this.structuredPayload = structuredPayload;
   }
 
   public String getModel() {

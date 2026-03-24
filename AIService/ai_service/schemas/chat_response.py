@@ -1,21 +1,14 @@
-"""聊天响应模型。
-
-这个响应结构是前端和 backend 稳定依赖的契约，
-所以字段命名要尽量长期稳定。
-"""
+"""聊天响应模型。"""
 
 from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from ai_service.schemas.common import ServiceItem
+from ai_service.schemas.common import ActionCard, ServiceItem
 
 
 class RiskLevel(str, Enum):
-    """风险等级枚举。
-
-    这里统一用 low / medium / high，避免多处各写一套值。
-    """
+    """统一风险等级。"""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -23,15 +16,21 @@ class RiskLevel(str, Enum):
 
 
 class ChatResponse(BaseModel):
-    """AIService 标准响应。"""
+    """AIService 标准响应。
+
+    这里把结构化展示字段一起返回，供 Java 后端直接透传给前端。
+    """
 
     requestId: str = Field(..., description="请求唯一标识")
+    intent: str = Field(default="UNKNOWN", description="回答意图标签")
     answer: str = Field(..., description="AI 主回答")
     riskLevel: RiskLevel = Field(default=RiskLevel.LOW, description="风险等级")
-    checklist: list[str] = Field(default_factory=list, description="建议检查清单")
+    checklist: list[str] = Field(default_factory=list, description="建议清单")
     services: list[ServiceItem] = Field(default_factory=list, description="推荐服务")
     followUps: list[str] = Field(default_factory=list, description="建议追问")
+    followUpQuestions: list[str] = Field(default_factory=list, description="前端快捷追问")
+    actionCards: list[ActionCard] = Field(default_factory=list, description="建议卡片")
     disclaimer: str = Field(
-        default="本回答仅供宠物日常护理参考，不能替代执业兽医诊断。",
+        default="本回答仅供宠物日常养护参考，不能替代执业兽医诊断。",
         description="免责声明",
     )

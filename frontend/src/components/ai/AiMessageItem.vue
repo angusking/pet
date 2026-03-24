@@ -1,21 +1,21 @@
 <template>
   <article class="ai-msg" :class="`role-${message.role}`">
     <div class="bubble">
-      <template v-if="parsedAssistant">
+      <template v-if="structuredAssistant">
         <div class="ai-structured">
           <div class="ai-structured-head">
             <span class="risk-pill" :class="`risk-${riskUi.key}`">{{ riskUi.label }}</span>
             <span class="intent-pill">{{ intentUi }}</span>
           </div>
 
-          <div class="content structured-answer">{{ parsedAssistant.answer || "暂无回答" }}</div>
+          <div class="content structured-answer">{{ structuredAssistant.answer || "暂无回答" }}</div>
 
           <div
-            v-if="parsedAssistant.actionCards?.length"
+            v-if="structuredAssistant.actionCards?.length"
             class="action-card-list"
           >
             <section
-              v-for="(card, idx) in parsedAssistant.actionCards"
+              v-for="(card, idx) in structuredAssistant.actionCards"
               :key="`${idx}-${card.title || 'card'}`"
               class="action-card"
             >
@@ -27,11 +27,11 @@
           </div>
 
           <div
-            v-if="parsedAssistant.followUpQuestions?.length"
+            v-if="structuredAssistant.followUpQuestions?.length"
             class="follow-up-list"
           >
             <button
-              v-for="(q, idx) in parsedAssistant.followUpQuestions"
+              v-for="(q, idx) in structuredAssistant.followUpQuestions"
               :key="`${idx}-${q}`"
               type="button"
               class="pill"
@@ -41,8 +41,8 @@
             </button>
           </div>
 
-          <p v-if="parsedAssistant.disclaimer" class="ai-disclaimer">
-            {{ parsedAssistant.disclaimer }}
+          <p v-if="structuredAssistant.disclaimer" class="ai-disclaimer">
+            {{ structuredAssistant.disclaimer }}
           </p>
         </div>
       </template>
@@ -68,35 +68,22 @@ const props = defineProps({
 
 defineEmits(["pick-suggestion"]);
 
-const parsedAssistant = computed(() => {
-  if (props.message?.role !== "assistant" || !props.message?.content) {
+const structuredAssistant = computed(() => {
+  if (props.message?.role !== "assistant") {
     return null;
   }
-  const raw = String(props.message.content).trim();
-  const jsonText = extractJson(raw);
-  if (!jsonText) return null;
-  try {
-    const obj = JSON.parse(jsonText);
-    if (!obj || typeof obj !== "object") return null;
-    const checklist = Array.isArray(obj.checklist) ? obj.checklist.filter(Boolean) : [];
-    const followUps = Array.isArray(obj.followUps) ? obj.followUps : [];
-    const followUpQuestions = Array.isArray(obj.followUpQuestions) ? obj.followUpQuestions : followUps;
-    const actionCards = normalizeActionCards(obj, checklist);
-    return {
-      intent: typeof obj.intent === "string" ? obj.intent : "UNKNOWN",
-      riskLevel: typeof obj.riskLevel === "string" ? obj.riskLevel : "NONE",
-      answer: typeof obj.answer === "string" ? obj.answer : "",
-      actionCards,
-      followUpQuestions: followUpQuestions.filter(Boolean),
-      disclaimer: typeof obj.disclaimer === "string" ? obj.disclaimer : "",
-    };
-  } catch {
-    return null;
+
+  const direct = normalizeStructuredMessage(props.message);
+  if (direct) {
+    return direct;
   }
+
+  // 兼容旧数据：历史上 assistant.content 可能直接存了一整段 JSON。
+  return parseLegacyStructuredMessage(props.message?.content);
 });
 
 const riskUi = computed(() => {
-  const risk = (parsedAssistant.value?.riskLevel || "NONE").toUpperCase();
+  const risk = String(structuredAssistant.value?.riskLevel || "NONE").toUpperCase();
   const map = {
     HIGH: { key: "high", label: "建议尽快就医" },
     MEDIUM: { key: "medium", label: "需要观察" },
@@ -107,7 +94,7 @@ const riskUi = computed(() => {
 });
 
 const intentUi = computed(() => {
-  const intent = (parsedAssistant.value?.intent || "UNKNOWN").toUpperCase();
+  const intent = String(structuredAssistant.value?.intent || "UNKNOWN").toUpperCase();
   const map = {
     HEALTH: "健康",
     CARE: "护理",
@@ -121,10 +108,76 @@ const intentUi = computed(() => {
   return map[intent] || "未分类";
 });
 
-function normalizeActionCards(obj, checklist) {
-  if (Array.isArray(obj.actionCards)) {
-    return obj.actionCards;
+function normalizeStructuredMessage(message) {
+  if (!message) return null;
+
+  const checklist = Array.isArray(message.checklist) ? message.checklist.filter(Boolean) : [];
+  const services = Array.isArray(message.services) ? message.services : [];
+  const followUps = Array.isArray(message.followUps) ? message.followUps.filter(Boolean) : [];
+  const followUpQuestions = Array.isArray(message.followUpQuestions) && message.followUpQuestions.length
+    ? message.followUpQuestions.filter(Boolean)
+    : followUps;
+  const actionCards = normalizeActionCards(message.actionCards, checklist, services);
+
+  const hasStructuredFields =
+    Boolean(message.intent) ||
+    Boolean(message.riskLevel) ||
+    checklist.length > 0 ||
+    services.length > 0 ||
+    followUps.length > 0 ||
+    followUpQuestions.length > 0 ||
+    actionCards.length > 0 ||
+    Boolean(message.disclaimer);
+
+  if (!hasStructuredFields) {
+    return null;
   }
+
+  return {
+    intent: typeof message.intent === "string" ? message.intent : "UNKNOWN",
+    riskLevel: typeof message.riskLevel === "string" ? message.riskLevel : "NONE",
+    answer: typeof message.content === "string" ? message.content : "",
+    actionCards,
+    followUpQuestions,
+    disclaimer: typeof message.disclaimer === "string" ? message.disclaimer : "",
+  };
+}
+
+function parseLegacyStructuredMessage(rawContent) {
+  if (!rawContent) return null;
+  const raw = String(rawContent).trim();
+  const jsonText = extractJson(raw);
+  if (!jsonText) return null;
+  try {
+    const obj = JSON.parse(jsonText);
+    if (!obj || typeof obj !== "object") return null;
+    const checklist = Array.isArray(obj.checklist) ? obj.checklist.filter(Boolean) : [];
+    const services = Array.isArray(obj.services) ? obj.services : [];
+    const followUps = Array.isArray(obj.followUps) ? obj.followUps.filter(Boolean) : [];
+    const followUpQuestions = Array.isArray(obj.followUpQuestions) && obj.followUpQuestions.length
+      ? obj.followUpQuestions.filter(Boolean)
+      : followUps;
+    return {
+      intent: typeof obj.intent === "string" ? obj.intent : "UNKNOWN",
+      riskLevel: typeof obj.riskLevel === "string" ? obj.riskLevel : "NONE",
+      answer: typeof obj.answer === "string" ? obj.answer : "",
+      actionCards: normalizeActionCards(obj.actionCards, checklist, services),
+      followUpQuestions,
+      disclaimer: typeof obj.disclaimer === "string" ? obj.disclaimer : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeActionCards(rawCards, checklist, services) {
+  if (Array.isArray(rawCards) && rawCards.length) {
+    return rawCards.map((card) => ({
+      title: card?.title || "",
+      items: Array.isArray(card?.items) ? card.items.filter(Boolean) : [],
+    }));
+  }
+
   const cards = [];
   if (checklist.length) {
     cards.push({
@@ -132,10 +185,10 @@ function normalizeActionCards(obj, checklist) {
       items: checklist,
     });
   }
-  if (Array.isArray(obj.services) && obj.services.length) {
+  if (Array.isArray(services) && services.length) {
     cards.push({
       title: "推荐服务",
-      items: obj.services
+      items: services
         .map((service) => {
           if (!service || typeof service !== "object") return "";
           const parts = [service.name, service.description, service.url].filter(Boolean);

@@ -23,6 +23,7 @@ import com.pet.entity.PetCategoryEntity;
 import com.pet.entity.PetEntity;
 import com.pet.repository.PetCategoryRepository;
 import com.pet.repository.PetRepository;
+import com.pet.repository.PetWeightRecordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -41,6 +42,8 @@ class PetServiceTest {
   private PetRepository petRepository;
   @Mock
   private PetCategoryRepository petCategoryRepository;
+  @Mock
+  private PetWeightRecordRepository petWeightRecordRepository;
   @Mock
   private ObjectMapper objectMapper;
   @Mock
@@ -229,6 +232,7 @@ class PetServiceTest {
 
     petService.deletePet(1L, 10L);
 
+    verify(petWeightRecordRepository).deleteByPetIdAndUserId(10L, 1L);
     verify(petRepository).delete(pet);
     verify(loginUserStateService, never()).updateCurrentPet(any(), any());
   }
@@ -242,6 +246,7 @@ class PetServiceTest {
 
     petService.deletePet(1L, 10L);
 
+    verify(petWeightRecordRepository).deleteByPetIdAndUserId(10L, 1L);
     verify(petRepository).delete(current);
     verify(petRepository).clearPrimary(1L);
     verify(petRepository).save(next);
@@ -257,6 +262,7 @@ class PetServiceTest {
 
     petService.deletePet(1L, 10L);
 
+    verify(petWeightRecordRepository).deleteByPetIdAndUserId(10L, 1L);
     verify(petRepository).delete(current);
     verify(loginUserStateService).updateCurrentPet(1L, null);
   }

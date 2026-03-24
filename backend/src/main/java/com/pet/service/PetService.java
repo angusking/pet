@@ -10,6 +10,7 @@ import com.pet.entity.PetCategoryEntity;
 import com.pet.entity.PetEntity;
 import com.pet.repository.PetCategoryRepository;
 import com.pet.repository.PetRepository;
+import com.pet.repository.PetWeightRecordRepository;
 import java.util.Collections;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -20,16 +21,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class PetService {
   private final PetRepository petRepository;
   private final PetCategoryRepository petCategoryRepository;
+  private final PetWeightRecordRepository petWeightRecordRepository;
   private final ObjectMapper objectMapper;
   private final LoginUserStateService loginUserStateService;
 
   public PetService(
       PetRepository petRepository,
       PetCategoryRepository petCategoryRepository,
+      PetWeightRecordRepository petWeightRecordRepository,
       ObjectMapper objectMapper,
       LoginUserStateService loginUserStateService) {
     this.petRepository = petRepository;
     this.petCategoryRepository = petCategoryRepository;
+    this.petWeightRecordRepository = petWeightRecordRepository;
     this.objectMapper = objectMapper;
     this.loginUserStateService = loginUserStateService;
   }
@@ -111,16 +115,15 @@ public class PetService {
   }
 
   /**
-   * 删除宠物档案。
-   *
-   * <p>如果删除的是当前主宠物，则自动把剩余列表中的第一只宠物提升为新的主宠物，
-   * 并同步登录态里的当前宠物；如果已经没有剩余宠物，则清空当前宠物状态。
+   * 删除宠物时，除了主档案，还会同步清理它的体重记录，避免产生孤儿数据。
+   * 如果删除的是当前主宠物，则自动把剩余列表中的第一只提升为新的主宠物。
    */
   @Transactional
   public void deletePet(Long userId, Long petId) {
     PetEntity pet = petRepository.findByIdAndUserId(petId, userId)
         .orElseThrow(() -> new BusinessException(ApiError.PET_NOT_FOUND, HttpStatus.NOT_FOUND));
     boolean deletingPrimary = Boolean.TRUE.equals(pet.getIsPrimary());
+    petWeightRecordRepository.deleteByPetIdAndUserId(petId, userId);
     petRepository.delete(pet);
 
     if (!deletingPrimary) {
@@ -168,8 +171,7 @@ public class PetService {
         pet.getCurrentWeight(),
         pet.getAvatarUrl(),
         pet.getIsPrimary() != null && pet.getIsPrimary(),
-        fromJson(pet.getTagsJson())
-    );
+        fromJson(pet.getTagsJson()));
   }
 
   private PetCategoryEntity resolveCategory(Long categoryId) {
@@ -223,9 +225,7 @@ public class PetService {
   }
 
   /**
-   * 继续保留 breed 这个展示字段，用来兼容现有页面和其他模块的显示逻辑。
-   *
-   * <p>真正结构化的数据仍然是 categoryId、categoryPath 和 customSpeciesNote。
+   * `breed` 继续保留为展示字段，结构化能力仍以 `categoryId/categoryPath/customSpeciesNote` 为准。
    */
   private String buildDisplaySpecies(PetCategoryEntity category, String customSpeciesNote, String legacyBreed) {
     String normalizedNote = normalizeText(customSpeciesNote);

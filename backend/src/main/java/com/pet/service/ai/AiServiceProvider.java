@@ -55,6 +55,7 @@ public class AiServiceProvider implements AiProvider {
       }
 
       return new AiReply(
+          response.answer(),
           objectMapper.writeValueAsString(response),
           "aiservice",
           null,

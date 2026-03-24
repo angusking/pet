@@ -1,6 +1,7 @@
 package com.pet.api.ai.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record AiChatMessageResponse(
     Long id,
@@ -9,5 +10,24 @@ public record AiChatMessageResponse(
     String content,
     String model,
     Integer tokens,
-    LocalDateTime createdAt
-) {}
+    LocalDateTime createdAt,
+    String intent,
+    String riskLevel,
+    List<String> checklist,
+    List<ServiceItem> services,
+    List<String> followUps,
+    List<String> followUpQuestions,
+    List<ActionCard> actionCards,
+    String disclaimer
+) {
+  public record ServiceItem(
+      String name,
+      String description,
+      String url
+  ) {}
+
+  public record ActionCard(
+      String title,
+      List<String> items
+  ) {}
+}

@@ -1,5 +1,6 @@
 package com.pet.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pet.api.ai.dto.AiChatCreateRequest;
 import com.pet.api.ai.dto.AiChatMessageResponse;
 import com.pet.api.ai.dto.AiChatSendMessageRequest;
@@ -18,6 +19,7 @@ import com.pet.repository.AiChatMessageRepository;
 import com.pet.repository.AiChatSessionRepository;
 import com.pet.repository.PetRepository;
 import com.pet.service.ai.AiProvider;
+import com.pet.service.ai.AiServiceChatResponse;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,26 +39,23 @@ public class AiChatService {
   private final AiChatMessageRepository aiChatMessageRepository;
   private final AiProvider aiProvider;
   private final AiProperties aiProperties;
+  private final ObjectMapper objectMapper;
 
   public AiChatService(
       PetRepository petRepository,
       AiChatSessionRepository aiChatSessionRepository,
       AiChatMessageRepository aiChatMessageRepository,
       AiProvider aiProvider,
-      AiProperties aiProperties) {
+      AiProperties aiProperties,
+      ObjectMapper objectMapper) {
     this.petRepository = petRepository;
     this.aiChatSessionRepository = aiChatSessionRepository;
     this.aiChatMessageRepository = aiChatMessageRepository;
     this.aiProvider = aiProvider;
     this.aiProperties = aiProperties;
+    this.objectMapper = objectMapper;
   }
 
-  /**
-   * 返回当前用户的 AI 会话列表。
-   *
-   * <p>这里直接查数据库，而不是读内存 Map。
-   * 这样服务重启后历史对话依然存在，前端也能真正显示“历史会话”。
-   */
   @Transactional(readOnly = true)
   public List<AiChatSessionResponse> listSessions(Long userId) {
     return aiChatSessionRepository.findByUserIdOrderByUpdatedAtDescIdDesc(userId).stream()
@@ -64,9 +63,6 @@ public class AiChatService {
         .toList();
   }
 
-  /**
-   * 新建会话时只创建会话主记录，不会提前创建消息。
-   */
   @Transactional
   public AiChatSessionResponse createSession(Long userId, AiChatCreateRequest request) {
     PetEntity pet = resolvePet(userId, request == null ? null : request.petId());
@@ -83,9 +79,6 @@ public class AiChatService {
     return toSessionResponse(aiChatSessionRepository.save(session));
   }
 
-  /**
-   * 消息列表按时间正序返回，前端直接从上到下渲染即可。
-   */
   @Transactional(readOnly = true)
   public List<AiChatMessageResponse> listMessages(Long userId, Long sessionId) {
     requireSession(userId, sessionId);
@@ -94,12 +87,6 @@ public class AiChatService {
         .toList();
   }
 
-  /**
-   * 提供给 AIService 的内部回源接口。
-   *
-   * <p>这里只返回最近若干条轻量消息，用于在 Redis miss 时恢复短期上下文。
-   * 依然保留用户和 session 的归属校验，避免内部接口绕过会话所有权判断。
-   */
   @Transactional(readOnly = true)
   public List<AiRecentChatMessageResponse> listRecentMessages(Long userId, Long sessionId, Integer limit) {
     requireSession(userId, sessionId);
@@ -116,15 +103,15 @@ public class AiChatService {
       AiChatMessageEntity message = latestMessages.get(i);
       result.add(new AiRecentChatMessageResponse(
           message.getRole(),
-          message.getContent(),
+          normalizeAssistantContentIfNeeded(
+              message.getRole(),
+              message.getContent(),
+              message.getStructuredPayload()),
           message.getCreatedAt()));
     }
     return result;
   }
 
-  /**
-   * 会话关联的宠物放在 session 表上，切换宠物时只更新这一条记录。
-   */
   @Transactional
   public AiChatSessionResponse updateSessionPet(Long userId, Long sessionId, AiChatUpdatePetRequest request) {
     AiChatSessionEntity session = requireSession(userId, sessionId);
@@ -134,19 +121,6 @@ public class AiChatService {
     return toSessionResponse(aiChatSessionRepository.save(session));
   }
 
-  /**
-   * 保存一轮对话，并调用 AIService 生成回复。
-   *
-   * <p>当前流程是：
-   * 1. 先保存 user 消息
-   * 2. 再取最近消息 recentMessages 传给 AIService
-   * 3. AI 返回后保存 assistant 消息
-   * 4. 最后更新 session 的摘要和更新时间
-   *
-   * <p>这个方法放在事务里。
-   * 如果 AI 调用失败或后续保存失败，这一轮 user 消息也会一起回滚，
-   * 避免数据库里留下不完整的半轮对话。
-   */
   @Transactional
   public AiChatSendMessageResponse sendMessage(Long userId, Long sessionId, AiChatSendMessageRequest request) {
     AiChatSessionEntity session = requireSession(userId, sessionId);
@@ -179,7 +153,10 @@ public class AiChatService {
     assistantMessage.setUserId(userId);
     assistantMessage.setPetId(session.getPetId());
     assistantMessage.setRole("assistant");
-    assistantMessage.setContent(reply.content());
+    // assistant.content 只保存用户可直接看到的正文；
+    // 完整结构化数据存进 structuredPayload，供前端渲染标签和卡片。
+    assistantMessage.setContent(normalizeAssistantContent(reply.content(), reply.structuredPayload()));
+    assistantMessage.setStructuredPayload(normalizeStructuredPayload(reply.structuredPayload(), reply.content()));
     assistantMessage.setModel(reply.model());
     assistantMessage.setTokens(reply.tokens());
     assistantMessage.setCreatedAt(LocalDateTime.now());
@@ -198,11 +175,6 @@ public class AiChatService {
         toMessageResponse(savedAssistantMessage));
   }
 
-  /**
-   * 每个会话允许的 user 消息条数仍然沿用现有配置。
-   *
-   * <p>区别只是以前从内存里数，现在从数据库里数。
-   */
   private void validateSessionUserMessageLimit(AiChatSessionEntity session) {
     Integer max = aiProperties.getSessionMaxUserMessages();
     if (max == null || max <= 0) {
@@ -227,9 +199,6 @@ public class AiChatService {
         .orElseThrow(() -> new BusinessException(ApiError.PET_NOT_FOUND, HttpStatus.NOT_FOUND));
   }
 
-  /**
-   * session 表只存 petId，所以返回给前端前需要补一份简化版宠物快照。
-   */
   private AiChatSessionResponse toSessionResponse(AiChatSessionEntity state) {
     PetEntity pet = state.getPetId() == null
         ? null
@@ -245,26 +214,32 @@ public class AiChatService {
   }
 
   private AiChatMessageResponse toMessageResponse(AiChatMessageEntity state) {
+    StructuredAssistantPayload payload = parseStructuredPayload(
+        state.getRole(),
+        state.getStructuredPayload(),
+        state.getContent());
     return new AiChatMessageResponse(
         state.getId(),
         state.getSessionId(),
         state.getRole(),
-        state.getContent(),
+        normalizeAssistantContentIfNeeded(state.getRole(), state.getContent(), state.getStructuredPayload()),
         state.getModel(),
         state.getTokens(),
-        state.getCreatedAt());
+        state.getCreatedAt(),
+        payload.intent(),
+        payload.riskLevel(),
+        payload.checklist(),
+        payload.services(),
+        payload.followUps(),
+        payload.followUpQuestions(),
+        payload.actionCards(),
+        payload.disclaimer());
   }
 
   private AiPetContextResponse petSnapshot(PetEntity pet) {
     return new AiPetContextResponse(pet.getId(), pet.getName(), pet.getBreed(), pet.getAvatarUrl());
   }
 
-  /**
-   * 只带最近 8 条消息去调用 AIService，避免上下文无限膨胀。
-   *
-   * <p>数据库查询先按倒序拿最近 8 条，再在内存里翻回正序，
-   * 这样最终给模型的消息顺序仍然是“旧的在前，新的在后”。
-   */
   private List<AiProvider.ChatMessage> buildRecentMessages(Long sessionId) {
     List<AiChatMessageEntity> latestMessages = loadRecentMessageEntities(sessionId, RECENT_MESSAGE_LIMIT);
     if (latestMessages.isEmpty()) {
@@ -274,9 +249,88 @@ public class AiChatService {
     List<AiProvider.ChatMessage> recentMessages = new ArrayList<>();
     for (int i = latestMessages.size() - 1; i >= 0; i--) {
       AiChatMessageEntity message = latestMessages.get(i);
-      recentMessages.add(new AiProvider.ChatMessage(message.getRole(), message.getContent()));
+      recentMessages.add(new AiProvider.ChatMessage(
+          message.getRole(),
+          normalizeAssistantContentIfNeeded(
+              message.getRole(),
+              message.getContent(),
+              message.getStructuredPayload())));
     }
     return recentMessages;
+  }
+
+  private String normalizeAssistantContentIfNeeded(String role, String content, String structuredPayload) {
+    if (!"assistant".equals(role)) {
+      return content;
+    }
+    return normalizeAssistantContent(content, structuredPayload);
+  }
+
+  /**
+   * assistant 正文优先用结构化 payload 里的 answer。
+   * 这样即使历史 content 曾经误存为整段 JSON，也能稳定抽取出正文。
+   */
+  private String normalizeAssistantContent(String content, String structuredPayload) {
+    StructuredAssistantPayload payload = parseStructuredPayload("assistant", structuredPayload, content);
+    if (payload.answer() != null && !payload.answer().isBlank()) {
+      return payload.answer();
+    }
+    return content;
+  }
+
+  private String normalizeStructuredPayload(String structuredPayload, String content) {
+    if (structuredPayload != null && !structuredPayload.isBlank()) {
+      return structuredPayload;
+    }
+    if (content != null && content.trim().startsWith("{")) {
+      return content;
+    }
+    return null;
+  }
+
+  private StructuredAssistantPayload parseStructuredPayload(String role, String structuredPayload, String content) {
+    if (!"assistant".equals(role)) {
+      return StructuredAssistantPayload.empty();
+    }
+    String payloadText = structuredPayload;
+    if ((payloadText == null || payloadText.isBlank()) && content != null && content.trim().startsWith("{")) {
+      payloadText = content;
+    }
+    if (payloadText == null || payloadText.isBlank()) {
+      return StructuredAssistantPayload.empty();
+    }
+
+    try {
+      AiServiceChatResponse payload = objectMapper.readValue(payloadText, AiServiceChatResponse.class);
+      List<String> followUps = payload.followUps() == null ? List.of() : payload.followUps();
+      List<String> followUpQuestions = payload.followUpQuestions() == null || payload.followUpQuestions().isEmpty()
+          ? followUps
+          : payload.followUpQuestions();
+      List<AiChatMessageResponse.ServiceItem> services = payload.services() == null
+          ? List.of()
+          : payload.services().stream()
+              .map(item -> new AiChatMessageResponse.ServiceItem(item.name(), item.description(), item.url()))
+              .toList();
+      List<AiChatMessageResponse.ActionCard> actionCards = payload.actionCards() == null
+          ? List.of()
+          : payload.actionCards().stream()
+              .map(card -> new AiChatMessageResponse.ActionCard(
+                  card.title(),
+                  card.items() == null ? List.of() : card.items()))
+              .toList();
+      return new StructuredAssistantPayload(
+          payload.intent() == null ? "UNKNOWN" : payload.intent(),
+          payload.answer(),
+          payload.riskLevel(),
+          payload.checklist() == null ? List.of() : payload.checklist(),
+          services,
+          followUps,
+          followUpQuestions,
+          actionCards,
+          payload.disclaimer());
+    } catch (Exception ignored) {
+      return StructuredAssistantPayload.empty();
+    }
   }
 
   private List<AiChatMessageEntity> loadRecentMessageEntities(Long sessionId, int limit) {
@@ -304,10 +358,6 @@ public class AiChatService {
     return "ai-" + timeHex + "-" + rnd;
   }
 
-  /**
-   * 没有用户自定义标题时，先放一个自动标题。
-   * 后续当第一轮 user 消息真正发送后，再用用户问题更新成更自然的标题。
-   */
   private String defaultSessionTitle(PetEntity pet, String requestedTitle) {
     if (requestedTitle != null && !requestedTitle.isBlank()) {
       return previewOf(requestedTitle.trim(), 100);
@@ -335,5 +385,35 @@ public class AiChatService {
       return "新对话";
     }
     return normalized.length() > 12 ? normalized.substring(0, 12) + "..." : normalized;
+  }
+
+  /**
+   * 后端内部使用的结构化消息快照。
+   *
+   * <p>这里不额外暴露成独立 DTO，避免把解析逻辑散落到多个地方。
+   */
+  private record StructuredAssistantPayload(
+      String intent,
+      String answer,
+      String riskLevel,
+      List<String> checklist,
+      List<AiChatMessageResponse.ServiceItem> services,
+      List<String> followUps,
+      List<String> followUpQuestions,
+      List<AiChatMessageResponse.ActionCard> actionCards,
+      String disclaimer
+  ) {
+    private static StructuredAssistantPayload empty() {
+      return new StructuredAssistantPayload(
+          "UNKNOWN",
+          null,
+          null,
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          null);
+    }
   }
 }
