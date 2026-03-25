@@ -195,8 +195,10 @@
 }
 
 .session-item {
-  width: 100%;
-  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
   padding: 10px;
   border-radius: 10px;
   background: #f8f1e6;
@@ -207,6 +209,30 @@
 .session-item.active {
   background: #fff7ea;
   border: 1px solid #e7c294;
+}
+
+.session-main {
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.session-delete {
+  align-self: center;
+  border: 1px solid #e7c294;
+  background: #fffaf2;
+  color: #8b5b3a;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.session-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .session-item .name {

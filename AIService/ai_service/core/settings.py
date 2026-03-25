@@ -61,6 +61,10 @@ class Settings(BaseSettings):
         default="./ai_service/prompts/tools/tool_registry_prompt.md",
         alias="TOOL_REGISTRY_PROMPT_FILE",
     )
+    weight_analysis_tool_prompt_file: str = Field(
+        default="./ai_service/prompts/tools/weight_analysis_llm_prompt.md",
+        alias="WEIGHT_ANALYSIS_TOOL_PROMPT_FILE",
+    )
 
     # Tool 启用列表。当前默认只启用体重分析，其他 Tool 先预留注册位。
     tool_enabled_list: list[str] = Field(

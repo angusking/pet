@@ -20,9 +20,15 @@ logger = get_logger(__name__)
 class DecisionService:
     """执行第一轮工具决策。"""
 
-    def __init__(self, prompt_builder: PromptBuilder, llm_provider: QwenProvider) -> None:
+    def __init__(
+        self,
+        prompt_builder: PromptBuilder,
+        llm_provider: QwenProvider,
+        log_service,
+    ) -> None:
         self._prompt_builder = prompt_builder
         self._llm_provider = llm_provider
+        self._log_service = log_service
 
     def decide(
         self,
@@ -38,7 +44,22 @@ class DecisionService:
             rewritten_query=rewritten_query,
             rag_context=rag_context,
         )
-        llm_result = self._llm_provider.chat(messages)
+        try:
+            llm_result = self._llm_provider.chat(messages)
+            self._log_service.log_llm_round(
+                request_id=request.requestId,
+                stage="decision",
+                messages=messages,
+                llm_result=llm_result,
+            )
+        except Exception as exc:
+            self._log_service.log_llm_error(
+                request_id=request.requestId,
+                stage="decision",
+                messages=messages,
+                error=str(exc),
+            )
+            raise
         content = llm_result.get("content", "")
         try:
             payload = json.loads(content)
@@ -49,6 +70,7 @@ class DecisionService:
                 needTool=False,
                 toolName=None,
                 toolInput=None,
+                followUp=False,
                 intent="UNKNOWN",
                 answer=content or "暂时未获得有效结果，请稍后重试。",
             )

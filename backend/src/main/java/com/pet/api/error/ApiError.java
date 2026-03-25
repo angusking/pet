@@ -15,6 +15,7 @@ public enum ApiError {
   UPLOAD_FAILED(3001, "上传失败"),
   FILE_TOO_LARGE(3002, "上传文件过大"),
   AI_CHAT_LIMIT_REACHED(4000, "当前用户咨询已达上限"),
+  AI_CHAT_MEMORY_CLEANUP_FAILED(4001, "AI 对话缓存清理失败"),
 
   INTERNAL_ERROR(9000, "服务器内部错误");
 

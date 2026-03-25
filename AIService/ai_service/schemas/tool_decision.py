@@ -12,6 +12,7 @@ class ToolDecision(BaseModel):
     needTool: bool = Field(..., description="是否需要调用 Tool")
     toolName: str | None = Field(default=None, description="要调用的 Tool 名称")
     toolInput: dict | None = Field(default=None, description="Tool 输入")
+    followUp: bool = Field(default=False, description="是否属于多轮追问场景")
     intent: str = Field(default="UNKNOWN", description="回答意图标签")
     answer: str = Field(default="", description="占位说明或直接返回给用户的答案")
     riskLevel: RiskLevel = Field(default=RiskLevel.LOW, description="风险等级")

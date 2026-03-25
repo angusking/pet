@@ -86,6 +86,14 @@ class MemoryService:
             ttl_seconds=self._ttl_seconds,
         )
 
+    async def clear_memory(self, conversation_id: str) -> None:
+        """清理指定会话的 Redis 短期记忆。
+
+        删除 AI 会话时，需要把 Redis 中的上下文窗口同步删除，
+        避免数据库已删但 Redis 里还残留旧对话。
+        """
+        await self._memory_provider.delete_messages(conversation_id)
+
     def _clip_messages(self, messages: list[dict]) -> list[dict]:
         """清洗非法消息，并只保留最近 N 条。"""
         normalized = [

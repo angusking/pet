@@ -1,6 +1,6 @@
 """Redis 短期记忆实现。
 
-这一层只做“存取”，不做业务规则判断。
+这一层只做“存取删”，不做业务规则判断。
 例如：
 - 不决定优先用 Redis 还是 fallback
 - 不决定窗口大小
@@ -50,7 +50,7 @@ class RedisMemoryProvider(MemoryProvider):
         """保存裁剪后的消息列表。
 
         这里采用“整段覆盖”而不是增量 append。
-        好处是逻辑更直观：
+        好处是逻辑更直接：
         - Redis 里的内容永远就是当前最终窗口
         - 不需要再额外 trim
         - 出问题时更容易排查
@@ -65,6 +65,11 @@ class RedisMemoryProvider(MemoryProvider):
             # 每次写入都刷新 TTL，表示“这个会话最近仍然活跃”。
             await pipe.expire(key, ttl_seconds)
             await pipe.execute()
+
+    async def delete_messages(self, conversation_id: str) -> None:
+        """直接删除整个会话的 Redis 短期记忆 key。"""
+        assert self._redis is not None
+        await self._redis.delete(self._build_key(conversation_id))
 
     def _build_key(self, conversation_id: str) -> str:
         """统一生成 Redis key。"""

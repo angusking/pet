@@ -9,7 +9,37 @@ class WeightAnalysisInput(BaseModel):
     """体重分析 Tool 输入。"""
 
     petId: int = Field(..., description="要分析的宠物 ID")
-    userId: int = Field(..., description="当前用户 ID，用于后端接口归属校验")
+    userId: int = Field(..., description="当前用户 ID")
+    requestId: str | None = Field(default=None, description="当前对话请求 ID")
+    userMessage: str | None = Field(default=None, description="用户原始问题")
+
+
+class WeightRecordItem(BaseModel):
+    """供 Tool 内部传给 LLM 的体重记录条目。"""
+
+    recordedAt: str
+    weightValue: float
+    unit: str
+    source: str | None = None
+    note: str | None = None
+    deltaFromPrevious: float | None = None
+
+
+class WeightAnalysisContext(BaseModel):
+    """体重分析 Tool 送给 LLM 的整理后上下文。"""
+
+    petId: int
+    petName: str = ""
+    categoryPath: str | None = None
+    displaySpecies: str | None = None
+    birthDate: str | None = None
+    gender: str | None = None
+    neutered: bool | None = None
+    currentWeight: float | None = None
+    latestRecordedAt: str | None = None
+    recordCount: int = 0
+    insufficientData: bool = False
+    records: list[WeightRecordItem] = Field(default_factory=list)
 
 
 class WeightAnalysisResult(BaseModel):
@@ -18,16 +48,12 @@ class WeightAnalysisResult(BaseModel):
     tool: str = Field(default="weight_analysis", description="Tool 名称")
     status: Literal["success", "no_data"] = Field(..., description="执行状态")
     petId: int = Field(..., description="宠物 ID")
-    supportLevel: str = Field(default="trend_only", description="类别支持级别")
-    categoryWeightHint: str = Field(default="", description="分类参考提示")
-    recordCount: int = Field(default=0, description="参与分析的记录条数")
-    currentWeight: float | None = Field(default=None, description="最近一次体重")
-    previousWeight: float | None = Field(default=None, description="前一次体重")
-    changeFromPrevious: float | None = Field(default=None, description="较前一次变化")
-    trend: Literal["up", "down", "stable", "unknown"] = Field(
-        default="unknown",
-        description="趋势方向",
-    )
-    analysis: str = Field(default="", description="对用户可读的一句话分析结果")
-    observations: list[str] = Field(default_factory=list, description="补充观察点")
-    riskHint: str = Field(default="", description="谨慎提示")
+    summary: str = Field(default="", description="一句话摘要")
+    trend: Literal["up", "down", "stable", "unknown"] = Field(default="unknown")
+    recordCount: int = Field(default=0, description="记录条数")
+    currentWeight: float | None = Field(default=None, description="当前体重")
+    latestRecordedAt: str | None = Field(default=None, description="最近记录时间")
+    observations: list[str] = Field(default_factory=list, description="观察点")
+    advice: list[str] = Field(default_factory=list, description="建议项")
+    followUpQuestion: str = Field(default="", description="建议继续追问的问题")
+    disclaimer: str = Field(default="", description="免责声明")

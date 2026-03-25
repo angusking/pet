@@ -11,4 +11,6 @@ public interface AiChatMessageRepository extends JpaRepository<AiChatMessageEnti
   List<AiChatMessageEntity> findBySessionIdOrderByCreatedAtDescIdDesc(Long sessionId, Pageable pageable);
 
   long countBySessionIdAndRole(Long sessionId, String role);
+
+  void deleteBySessionId(Long sessionId);
 }

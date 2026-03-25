@@ -10,6 +10,9 @@ export const aiApi = {
   listMessages(sessionId) {
     return api.get(`/api/ai/chats/${sessionId}/messages`);
   },
+  deleteChat(sessionId) {
+    return api.delete(`/api/ai/chats/${sessionId}`);
+  },
   updateSessionPet(sessionId, petId) {
     return api.post(`/api/ai/chats/${sessionId}/pet`, { petId });
   },

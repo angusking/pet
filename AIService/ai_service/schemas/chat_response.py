@@ -22,6 +22,7 @@ class ChatResponse(BaseModel):
     """
 
     requestId: str = Field(..., description="请求唯一标识")
+    followUp: bool = Field(default=False, description="是否属于多轮追问场景")
     intent: str = Field(default="UNKNOWN", description="回答意图标签")
     answer: str = Field(..., description="AI 主回答")
     riskLevel: RiskLevel = Field(default=RiskLevel.LOW, description="风险等级")

@@ -13,20 +13,22 @@ API 层只处理 HTTP 相关工作：
 from fastapi import APIRouter, Depends, Request
 
 from ai_service.orchestrators.chat_orchestrator import ChatOrchestrator
+from ai_service.providers.memory.base import MemoryProvider
 from ai_service.schemas.chat_request import ChatRequest
 from ai_service.schemas.chat_response import ChatResponse
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+internal_router = APIRouter(prefix="/internal/ai", tags=["ai-internal"])
 
 
 def get_orchestrator(request: Request) -> ChatOrchestrator:
-    """从应用上下文中获取全局聊天编排器。
-
-    之所以不用每次在路由里现场 new 一个编排器，是因为：
-    - 编排器依赖 Redis provider 等共享资源
-    - 这些依赖应该在应用启动时统一初始化
-    """
+    """从应用上下文中获取全局聊天编排器。"""
     return request.app.state.chat_orchestrator
+
+
+def get_memory_provider(request: Request) -> MemoryProvider:
+    """从应用上下文中获取全局记忆 Provider。"""
+    return request.app.state.memory_provider
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -34,12 +36,19 @@ async def chat(
     payload: ChatRequest,
     orchestrator: ChatOrchestrator = Depends(get_orchestrator),
 ) -> ChatResponse:
-    """AI 聊天主入口。
-
-    Java backend 只需要调这个接口，不需要关心：
-    - Redis 短期记忆怎么取
-    - RAG / tool 怎么串
-    - 输出怎么兜底
-    这些都交给编排器处理。
-    """
+    """AI 聊天主入口。"""
     return await orchestrator.handle(payload)
+
+
+@internal_router.delete("/memory/{conversation_id}")
+async def clear_memory(
+    conversation_id: str,
+    memory_provider: MemoryProvider = Depends(get_memory_provider),
+) -> dict[str, str]:
+    """清理指定会话的 Redis 短期记忆。
+
+    这个接口只给 backend 内部调用，用于用户删除某个 AI 会话时，
+    同步把 AIService 的短期记忆窗口一起删除。
+    """
+    await memory_provider.delete_messages(conversation_id)
+    return {"status": "ok", "conversationId": conversation_id}

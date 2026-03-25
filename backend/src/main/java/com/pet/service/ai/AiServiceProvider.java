@@ -8,6 +8,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -17,6 +19,8 @@ import org.springframework.web.client.RestClientException;
 @Component
 @ConditionalOnProperty(prefix = "app.ai", name = "provider", havingValue = "aiservice")
 public class AiServiceProvider implements AiProvider {
+  private static final Logger aiLog = LoggerFactory.getLogger("com.pet.ai.interaction");
+
   private final RestClient restClient;
   private final ObjectMapper objectMapper;
 
@@ -42,6 +46,14 @@ public class AiServiceProvider implements AiProvider {
         new AiServiceChatRequest.BizData(List.of(), List.of()));
 
     try {
+      String requestJson = objectMapper.writeValueAsString(payload);
+      aiLog.info(
+          "backend->aiservice requestId={}, conversationId={}, userId={}, payload={}",
+          request.requestId(),
+          request.conversationId(),
+          request.userId(),
+          requestJson);
+
       AiServiceChatResponse response = restClient.post()
           .uri("/api/ai/chat")
           .contentType(MediaType.APPLICATION_JSON)
@@ -54,6 +66,12 @@ public class AiServiceProvider implements AiProvider {
         throw new IllegalStateException("AIService returned empty response");
       }
 
+      String responseJson = objectMapper.writeValueAsString(response);
+      aiLog.info(
+          "backend<-aiservice requestId={}, response={}",
+          request.requestId(),
+          responseJson);
+
       return new AiReply(
           response.answer(),
           objectMapper.writeValueAsString(response),
@@ -61,8 +79,16 @@ public class AiServiceProvider implements AiProvider {
           null,
           response.requestId());
     } catch (RestClientException e) {
+      aiLog.info(
+          "backend<->aiservice error requestId={}, message={}",
+          request.requestId(),
+          e.getMessage());
       throw new IllegalStateException("Failed to call AIService: " + e.getMessage(), e);
     } catch (JsonProcessingException e) {
+      aiLog.info(
+          "backend<->aiservice serialization error requestId={}, message={}",
+          request.requestId(),
+          e.getMessage());
       throw new IllegalStateException("Failed to serialize AIService response", e);
     }
   }

@@ -2,48 +2,54 @@
 
 ## 目标
 
-本次改造把 AIService 从“单轮统一回答”升级为“两阶段对话 + Tool 路由”架构，先支撑体重分析 Tool，再为后续地点查询、服务查询、用品推荐等 Tool 预留统一扩展位。
+本次改造把 AIService 从“单轮统一回答”升级为“第一轮决策 + Tool 执行 + 第二轮最终回答”的两阶段架构。
 
-## 第一阶段：工具决策
+当前先落地 `weight_analysis`，但整体结构按多 Tool 扩展设计，后续可以平滑接入：
 
-第一轮内部对话不直接负责复杂分析，而是先判断：
+- `location_search`
+- `service_lookup`
+- `product_recommendation`
 
-1. 当前问题是否需要调用 Tool
-2. 如果需要，应该调用哪个 Tool
-3. Tool 缺不缺必要参数
-4. 如果不需要 Tool，是否可以直接返回最终回答
+## 总体流程
 
-第一轮输出统一为 `ToolDecision` 结构，包含：
+整体链路分为 4 步：
+
+1. 用户问题进入 AIService。
+2. 第一轮对话只负责决策：
+   - 是否需要调用 Tool
+   - 需要调用哪个 Tool
+   - 当前输入是否满足 Tool 的必要参数
+3. 如果需要 Tool，先执行 Tool。
+4. Tool 结果被注入第二轮 Prompt，再生成最终返回给用户的结构化回答。
+
+简化后的时序如下：
+
+```text
+用户问题
+  -> 第一轮决策
+    -> 不需要 Tool：直接返回最终回答
+    -> 需要 Tool：执行 Tool
+      -> 将 Tool 结果注入第二轮 Prompt
+      -> 生成最终回答
+```
+
+## 第一轮：Tool 决策
+
+第一轮不直接做复杂分析，职责非常单一：
+
+- 判断是否需要调用 Tool
+- 选择最相关的一个 Tool
+- 如果缺少必要参数，直接提示缺什么信息
+- 如果无需 Tool，直接给出最终回答
+
+第一轮输出统一使用 `ToolDecision` 结构，包含：
 
 - `needTool`
 - `toolName`
 - `toolInput`
-- `answer`
-- `riskLevel`
-- `checklist`
-- `services`
-- `followUps`
-- `disclaimer`
-
-当 `needTool = false` 时，第一轮结果直接作为最终回答返回。
-
-当 `needTool = true` 时，系统执行指定 Tool，然后进入第二轮最终回答。
-
-## 第二阶段：最终回答
-
-第二轮在拿到 Tool 结果后，结合：
-
-- 用户问题
-- 宠物信息
-- 最近对话
-- RAG 上下文
-- Tool 结果
-
-生成最终 JSON 回答。
-
-当前最终回答除了 `answer` 之外，还会一起返回结构化展示字段，例如：
-
+- `followUp`
 - `intent`
+- `answer`
 - `riskLevel`
 - `checklist`
 - `services`
@@ -52,106 +58,199 @@
 - `actionCards`
 - `disclaimer`
 
-这样 Java 后端可以直接把结构化字段透传给前端，前端不再需要从 `content` 里反向解析 JSON。
+当 `needTool = false` 时，第一轮结果可以直接作为最终回复返回。
 
-## Prompt 目录
+当 `needTool = true` 时，系统会继续执行对应 Tool，再进入第二轮。
 
-AIService 内部 Prompt 目录调整为：
+## 第二轮：最终回答
+
+第二轮负责把以下信息整合成最终输出：
+
+- 用户当前问题
+- 宠物信息
+- 最近对话
+- RAG 上下文
+- Tool 分析结果
+
+最终回答仍然要求输出结构化 JSON，核心字段包括：
+
+- `followUp`
+- `intent`
+- `answer`
+- `riskLevel`
+- `checklist`
+- `services`
+- `followUps`
+- `followUpQuestions`
+- `actionCards`
+- `disclaimer`
+
+Java 后端会把这些结构化字段单独保存并透传给前端，前端不再依赖从 `message.content` 中反向解析 JSON。
+
+## Prompt 分层
+
+Prompt 目录按职责拆分：
 
 - `ai_service/prompts/system/base_system_prompt.md`
-  - 全局角色、安全边界、最终输出格式
+  - 全局角色、安全边界、输出总规则
 - `ai_service/prompts/system/decision_prompt.md`
   - 第一轮 Tool 决策规则
 - `ai_service/prompts/system/final_response_prompt.md`
   - 第二轮最终回答规则
 - `ai_service/prompts/tools/tool_registry_prompt.md`
-  - Tool 注册表的静态说明
+  - 可用 Tool 列表和通用选择规则
+- `ai_service/prompts/tools/weight_analysis_llm_prompt.md`
+  - 体重分析 Tool 内部给 LLM 的专用分析提示词
 
-其中第一轮真正使用的 Tool 列表，不只来自静态 Markdown，还会由 `ToolRegistry` 在运行时把当前启用的 Tool 定义拼接进 prompt，避免提示词和代码注册表脱节。
+这层拆分的目的，是避免把“工具选择”“工具内部分析”“最终用户回答”混在同一个 Prompt 里。
 
 ## Tool 组织形式
 
-Tool 代码按“目录化 Tool”组织，每个 Tool 独立管理：
+每个 Tool 都按目录化方式组织，避免后续扩展时继续堆单文件逻辑。
+
+当前体重分析 Tool 的结构如下：
+
+```text
+ai_service/tools/weight_analysis/
+├─ tool.py
+├─ schemas.py
+├─ context_builder.py
+└─ llm_analyzer.py
+```
+
+各文件职责：
 
 - `tool.py`
-  - Tool 执行入口
+  - Tool 对外入口
+  - 负责串联“查后端 -> 整理上下文 -> 调 LLM 分析”
 - `schemas.py`
   - Tool 输入输出结构
-- `analyzer.py`
-  - 规则分析或业务逻辑
-- `provider.py` / `backend_provider.py`
-  - 下游依赖访问
+- `context_builder.py`
+  - 把后端原始记录整理成稳定的分析上下文
+- `llm_analyzer.py`
+  - 调用 LLM 完成体重趋势分析
 
-当前已落地的 Tool：
+## Tool Registry
 
-- `ai_service/tools/weight_analysis/`
+`ai_service/tools/registry.py` 负责集中注册所有 Tool 元信息，包括：
 
-后续建议按相同模式新增：
+- `name`
+- `description`
+- `when_to_use`
+- `required_inputs`
+- `when_not_to_use`
+- `notes`
+- `enabled`
+- `tool`
 
-- `ai_service/tools/location_search/`
-- `ai_service/tools/service_lookup/`
-- `ai_service/tools/product_recommendation/`
+第一轮决策 Prompt 使用的 Tool 列表，不只来自静态 Markdown，还会在运行时把注册表中当前启用的 Tool 信息拼进去，避免 Prompt 文案和代码注册表逐渐漂移。
 
-## Tool 注册表
+## 体重分析 Tool 的职责边界
 
-`ai_service/tools/registry.py` 负责维护所有 Tool 的元信息：
+### Java 后端职责
 
-- 名称
-- 用途
-- 适用场景
-- 必需输入
-- 不应调用的场景
-- Tool 实例
-- 是否启用
+`GET /internal/ai/pets/{petId}/weight-records`
 
-这样新增 Tool 时，只需要：
+后端现在只负责：
 
-1. 新建 Tool 目录
-2. 在 `registry.py` 中注册
-3. 在配置里启用
+- 校验 `userId + petId` 归属
+- 返回宠物基础信息
+- 返回最近 N 条原始体重记录
 
-而不需要修改第一轮决策主流程。
+后端不再负责：
+
+- 趋势判断
+- 分类参考解释
+- 面向 AI 的分析文案
+- “上一条变化值”等分析型派生结论
+
+### AIService Tool 职责
+
+`weight_analysis` Tool 现在负责：
+
+1. 调 Java 内部接口获取原始体重记录
+2. 使用 `context_builder` 整理成稳定上下文
+3. 调用专用 LLM Prompt 完成体重趋势分析
+4. 将分析结果返回给第二轮最终回答
+
+也就是说，当前体重分析链路是：
+
+```text
+Java 后端：只取数
+AIService Tool：整理数据 + 调 LLM 分析
+第二轮回答：消费 Tool 分析结果并生成用户可见回复
+```
 
 ## 体重分析 Tool 当前流程
 
-1. 第一轮判断用户问题是否涉及体重趋势分析
-2. 若命中且具备 `userId + petId`，选择 `weight_analysis`
-3. Tool 调用 Java 后端内部接口：
+1. 第一轮判断用户问题是否涉及体重趋势分析。
+2. 如果命中且具备 `userId + petId`，选择 `weight_analysis`。
+3. Tool 调用 Java 内部接口：
    - `GET /internal/ai/pets/{petId}/weight-records`
-4. Tool 内部 `WeightAnalyzer` 基于最近记录做保守趋势分析
-5. Tool 输出结构化结果
-6. 第二轮把 Tool 结果整合为最终面向用户的回答
+4. Tool 将返回的原始记录整理为稳定上下文。
+5. Tool 内部使用专用 Prompt 调 LLM 做趋势分析。
+6. Tool 输出结构化分析结果。
+7. 第二轮把该分析结果整合为最终面向用户的回答。
 
 ## 相关代码落点
 
-本次改造重点文件：
+AIService 关键文件：
 
 - `ai_service/capabilities/decision_service.py`
 - `ai_service/capabilities/tool_service.py`
+- `ai_service/orchestrators/chat_orchestrator.py`
 - `ai_service/prompts/prompt_builder.py`
 - `ai_service/tools/registry.py`
 - `ai_service/tools/weight_analysis/`
 - `ai_service/providers/backend/pet_weight_provider.py`
-- `ai_service/orchestrators/chat_orchestrator.py`
 
-Java 后端配套改动：
+Java 后端关键文件：
 
-- `backend/src/main/java/com/pet/service/ai/AiServiceProvider.java`
-- `backend/src/main/java/com/pet/service/AiChatService.java`
-- `backend/src/main/java/com/pet/api/ai/dto/AiChatMessageResponse.java`
-- `backend/src/main/resources/db/migration/V20260324195000__add_ai_chat_message_structured_payload.sql`
+- `backend/src/main/java/com/pet/api/ai/AiInternalPetController.java`
+- `backend/src/main/java/com/pet/api/ai/dto/AiPetWeightRecordsResponse.java`
+- `backend/src/main/java/com/pet/api/ai/dto/AiPetWeightRecordItemResponse.java`
+- `backend/src/main/java/com/pet/service/PetWeightService.java`
 
-## 配置项
+## 环境变量
 
-新增或调整的关键配置：
+与本次改造相关的关键配置：
 
 - `BASE_SYSTEM_PROMPT_FILE`
 - `DECISION_PROMPT_FILE`
 - `FINAL_RESPONSE_PROMPT_FILE`
 - `TOOL_REGISTRY_PROMPT_FILE`
+- `WEIGHT_ANALYSIS_TOOL_PROMPT_FILE`
 - `TOOL_ENABLED_LIST`
 - `WEIGHT_ANALYSIS_LIMIT`
+- `BACKEND_BASE_URL`
+- `BACKEND_TIMEOUT_SECONDS`
 
-默认只启用：
+默认启用的 Tool：
 
 - `weight_analysis`
+
+## 日志
+
+当前日志分三层：
+
+1. AIService 应用级日志
+   - `AIlog/application.log`
+
+2. AIService 单次请求日志
+   - `AIlog/YYYY-MM-DD/*_send.txt`
+   - `AIlog/YYYY-MM-DD/*_decision_llm.txt`
+   - `AIlog/YYYY-MM-DD/*_final_llm.txt`
+   - `AIlog/YYYY-MM-DD/*_decision_llm_error.txt`
+   - `AIlog/YYYY-MM-DD/*_final_llm_error.txt`
+   - `AIlog/YYYY-MM-DD/*_weight_analysis_tool_llm.txt`
+   - `AIlog/YYYY-MM-DD/*_weight_analysis_tool_llm_error.txt`
+
+3. Java 后端与 AIService 交互日志
+   - `backend/logs/backend/ai-interaction.log`
+
+这样可以完整追踪：
+
+- backend 发给 AIService 的请求
+- AIService 第一轮决策输入输出
+- Tool 内部与 LLM 的交互内容
+- AIService 第二轮最终回答输入输出

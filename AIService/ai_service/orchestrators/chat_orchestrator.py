@@ -45,15 +45,16 @@ class ChatOrchestrator:
         )
         self._prompt_builder = PromptBuilder(settings=settings)
         self._llm_provider = QwenProvider(settings=settings)
+        self._log_service = LogService(settings.log_dir)
         self._decision_service = DecisionService(
             prompt_builder=self._prompt_builder,
             llm_provider=self._llm_provider,
+            log_service=self._log_service,
         )
         self._rewrite_service = RewriteService()
         self._rag_service = RagService()
         self._tool_service = ToolService(settings=settings)
         self._safety_service = SafetyService()
-        self._log_service = LogService(settings.log_dir)
 
     async def handle(self, request: ChatRequest) -> ChatResponse:
         """执行完整的聊天处理流程。"""
@@ -93,6 +94,7 @@ class ChatOrchestrator:
                 # 不需要 Tool 时，第一轮结果就是最终结果。
                 response = ChatResponse(
                     requestId=request.requestId,
+                    followUp=decision.followUp,
                     intent=decision.intent,
                     answer=decision.answer,
                     riskLevel=decision.riskLevel,
@@ -105,9 +107,12 @@ class ChatOrchestrator:
                 )
             else:
                 # 需要 Tool 时，先执行 Tool，再进入第二轮最终回答。
+                tool_input = dict(decision.toolInput or {})
+                tool_input["requestId"] = request.requestId
+                tool_input["userMessage"] = request.message
                 tool_result = await self._tool_service.invoke(
                     tool_name=decision.toolName or "",
-                    tool_input=decision.toolInput or {},
+                    tool_input=tool_input,
                 )
                 used_tool = True
 
@@ -119,7 +124,22 @@ class ChatOrchestrator:
                     tool_result=tool_result,
                 )
 
-                llm_result = self._llm_provider.chat(messages)
+                try:
+                    llm_result = self._llm_provider.chat(messages)
+                    self._log_service.log_llm_round(
+                        request_id=request.requestId,
+                        stage="final",
+                        messages=messages,
+                        llm_result=llm_result,
+                    )
+                except Exception as exc:
+                    self._log_service.log_llm_error(
+                        request_id=request.requestId,
+                        stage="final",
+                        messages=messages,
+                        error=str(exc),
+                    )
+                    raise
                 model_name = llm_result.get("model", model_name)
                 response = self._parse_llm_output(
                     request_id=request.requestId,
@@ -166,6 +186,7 @@ class ChatOrchestrator:
             )
             return ChatResponse(
                 requestId=request.requestId,
+                followUp=False,
                 intent="UNKNOWN",
                 answer="抱歉，AI 助手暂时无法处理您的请求，请稍后再试。",
                 riskLevel=RiskLevel.LOW,
@@ -182,6 +203,7 @@ class ChatOrchestrator:
             data = self._normalize_llm_payload(request_id, content)
             return ChatResponse(
                 requestId=request_id,
+                followUp=bool(data.get("followUp", False)),
                 intent=data.get("intent", "UNKNOWN"),
                 answer=data.get("answer", ""),
                 riskLevel=data.get("riskLevel", "low"),
@@ -199,6 +221,7 @@ class ChatOrchestrator:
             logger.warning("llm output is not valid json, fallback to plain answer")
             return ChatResponse(
                 requestId=request_id,
+                followUp=False,
                 intent="UNKNOWN",
                 answer=content or "未获取到有效回答。",
                 riskLevel=RiskLevel.LOW,

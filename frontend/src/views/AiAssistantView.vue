@@ -48,17 +48,29 @@
             <button type="button" class="ghost-btn" @click="closeHistoryDrawer">关闭</button>
           </div>
           <div class="drawer-list">
-            <button
+            <div
               v-for="s in sessions"
               :key="s.id"
-              type="button"
               class="session-item"
               :class="{ active: currentSessionId === s.id }"
-              @click="selectSession(s.id)"
             >
-              <div class="name">{{ s.title || "新对话" }}</div>
-              <div class="sub">{{ formatSessionStartTime(s.createdAt) }}</div>
-            </button>
+              <button
+                type="button"
+                class="session-main"
+                @click="selectSession(s.id)"
+              >
+                <div class="name">{{ s.title || "新对话" }}</div>
+                <div class="sub">{{ formatSessionStartTime(s.createdAt) }}</div>
+              </button>
+              <button
+                type="button"
+                class="session-delete"
+                :disabled="deletingSessionId === s.id"
+                @click.stop="deleteSession(s.id)"
+              >
+                {{ deletingSessionId === s.id ? "删除中" : "删除" }}
+              </button>
+            </div>
             <p v-if="!sessions.length" class="muted">暂无会话</p>
           </div>
         </aside>
@@ -103,6 +115,7 @@ const sending = ref(false);
 const messageLoading = ref(false);
 const messageError = ref("");
 const sendError = ref("");
+const deletingSessionId = ref(null);
 
 onMounted(async () => {
   await Promise.all([loadCurrentPet(), loadMyPets(), loadSessions()]);
@@ -174,6 +187,36 @@ const selectSession = async (sessionId) => {
     messageError.value = err.details?.[0] || err.message || "加载消息失败";
   } finally {
     messageLoading.value = false;
+  }
+};
+
+const deleteSession = async (sessionId) => {
+  if (!sessionId || deletingSessionId.value) return;
+
+  const confirmed = window.confirm("删除后，该对话的历史记录和 AI 短期记忆都会被清理，确定继续吗？");
+  if (!confirmed) {
+    return;
+  }
+
+  deletingSessionId.value = sessionId;
+  sendError.value = "";
+  try {
+    await aiApi.deleteChat(sessionId);
+    await loadSessions();
+
+    if (currentSessionId.value === sessionId) {
+      messages.value = [];
+      currentSessionId.value = null;
+      if (sessions.value.length) {
+        await selectSession(sessions.value[0].id);
+      } else {
+        await createNewChat();
+      }
+    }
+  } catch (err) {
+    sendError.value = err.details?.[0] || err.message || "删除会话失败";
+  } finally {
+    deletingSessionId.value = null;
   }
 };
 

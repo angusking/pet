@@ -2,8 +2,8 @@ package com.pet.service;
 
 import com.pet.api.error.ApiError;
 import com.pet.api.error.BusinessException;
-import com.pet.api.ai.dto.AiPetWeightAnalysisDataResponse;
-import com.pet.api.ai.dto.AiPetWeightRecordResponse;
+import com.pet.api.ai.dto.AiPetWeightRecordItemResponse;
+import com.pet.api.ai.dto.AiPetWeightRecordsResponse;
 import com.pet.api.pet.dto.PetWeightRecordCreateRequest;
 import com.pet.api.pet.dto.PetWeightRecordListResponse;
 import com.pet.api.pet.dto.PetWeightRecordResponse;
@@ -58,7 +58,7 @@ public class PetWeightService {
    * - 顺手补齐 supportLevel 和提示文案，减少 AIService 侧重复规则
    */
   @Transactional(readOnly = true)
-  public AiPetWeightAnalysisDataResponse getWeightAnalysisDataForAi(Long userId, Long petId, Integer limit) {
+  public AiPetWeightRecordsResponse getWeightRecordsForAi(Long userId, Long petId, Integer limit) {
     PetEntity pet = requirePet(userId, petId);
     List<PetWeightRecordEntity> allRecords = petWeightRecordRepository.findByPetIdAndUserIdOrderByRecordedAtDescIdDesc(
         petId,
@@ -68,23 +68,19 @@ public class PetWeightService {
         ? allRecords
         : allRecords.subList(0, resolvedLimit);
 
-    PetWeightRecordEntity latest = records.isEmpty() ? null : records.get(0);
-    PetWeightRecordEntity previous = records.size() > 1 ? records.get(1) : null;
-    String supportLevel = resolveSupportLevel(pet.getCategoryPath());
-
-    return new AiPetWeightAnalysisDataResponse(
+    return new AiPetWeightRecordsResponse(
         pet.getId(),
         pet.getName(),
         pet.getCategoryPath(),
-        pet.getBreed(),
-        supportLevel,
-        buildCategoryWeightHint(pet.getCategoryPath(), supportLevel),
-        latest == null ? pet.getCurrentWeight() : latest.getWeightValue(),
-        latest == null ? null : latest.getRecordedAt(),
-        previous == null ? null : previous.getWeightValue(),
-        previous == null ? null : subtract(latest.getWeightValue(), previous.getWeightValue()),
+        pet.getCustomSpeciesNote() != null && !pet.getCustomSpeciesNote().isBlank()
+            ? pet.getCustomSpeciesNote()
+            : pet.getBreed(),
+        pet.getBirthDate(),
+        pet.getGender(),
+        pet.getNeutered(),
+        pet.getCurrentWeight(),
         records.size(),
-        records.stream().map(this::toAiRecordResponse).toList());
+        records.stream().map(this::toAiRecordItemResponse).toList());
   }
 
   /**
@@ -198,8 +194,8 @@ public class PetWeightService {
   /**
    * AI 内部工具不需要前端那些展示专用字段，所以单独映射一份更轻的记录结构。
    */
-  private AiPetWeightRecordResponse toAiRecordResponse(PetWeightRecordEntity record) {
-    return new AiPetWeightRecordResponse(
+  private AiPetWeightRecordItemResponse toAiRecordItemResponse(PetWeightRecordEntity record) {
+    return new AiPetWeightRecordItemResponse(
         record.getWeightValue(),
         record.getUnit(),
         record.getSource(),

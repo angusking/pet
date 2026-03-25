@@ -30,3 +30,7 @@ class MemoryProvider(ABC):
     @abstractmethod
     async def save_messages(self, conversation_id: str, messages: list[dict], ttl_seconds: int) -> None:
         """保存会话消息。"""
+
+    @abstractmethod
+    async def delete_messages(self, conversation_id: str) -> None:
+        """删除指定会话的短期记忆。"""

@@ -11,6 +11,7 @@ public record AiChatMessageResponse(
     String model,
     Integer tokens,
     LocalDateTime createdAt,
+    Boolean followUp,
     String intent,
     String riskLevel,
     List<String> checklist,

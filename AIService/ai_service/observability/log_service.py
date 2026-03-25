@@ -49,6 +49,63 @@ class LogService:
         )
         self._write_file(now, request.requestId, "send", content)
 
+    def log_llm_round(
+        self,
+        request_id: str,
+        stage: str,
+        messages: list[dict],
+        llm_result: dict,
+    ) -> None:
+        """记录 AIService 与 LLM 的一次完整交互。
+
+        stage 常见取值：
+        - decision
+        - final
+        """
+        now = datetime.now()
+        content = "\n".join(
+            [
+                "=== AI LLM ROUND LOG ===",
+                f"time={now.isoformat()}",
+                f"traceId={request_id}",
+                f"stage={stage}",
+                "",
+                "[MESSAGES]",
+                self._as_json(messages),
+                "",
+                "[LLM_RESULT]",
+                self._as_json(llm_result),
+                "",
+            ]
+        )
+        self._write_file(now, request_id, f"{stage}_llm", content)
+
+    def log_llm_error(
+        self,
+        request_id: str,
+        stage: str,
+        messages: list[dict],
+        error: str,
+    ) -> None:
+        """记录 AIService 与 LLM 交互失败时的上下文。"""
+        now = datetime.now()
+        content = "\n".join(
+            [
+                "=== AI LLM ROUND ERROR LOG ===",
+                f"time={now.isoformat()}",
+                f"traceId={request_id}",
+                f"stage={stage}",
+                "",
+                "[MESSAGES]",
+                self._as_json(messages),
+                "",
+                "[ERROR]",
+                error,
+                "",
+            ]
+        )
+        self._write_file(now, request_id, f"{stage}_llm_error", content)
+
     def log_error(
         self,
         request: ChatRequest,

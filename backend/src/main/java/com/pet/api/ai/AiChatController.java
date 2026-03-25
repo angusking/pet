@@ -10,6 +10,7 @@ import com.pet.service.AiChatService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,5 +65,13 @@ public class AiChatController {
       Authentication authentication) {
     Long userId = (Long) authentication.getPrincipal();
     return aiChatService.sendMessage(userId, sessionId, request);
+  }
+
+  @DeleteMapping("/{sessionId}")
+  public void deleteSession(
+      @PathVariable("sessionId") Long sessionId,
+      Authentication authentication) {
+    Long userId = (Long) authentication.getPrincipal();
+    aiChatService.deleteSession(userId, sessionId);
   }
 }

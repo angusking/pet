@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from ai_service.api.chat import router as chat_router
+from ai_service.api.chat import internal_router, router as chat_router
 from ai_service.core.logging import configure_logging, get_logger
 from ai_service.core.settings import get_settings
 from ai_service.orchestrators.chat_orchestrator import ChatOrchestrator
@@ -67,6 +67,7 @@ app = FastAPI(
 )
 
 app.include_router(chat_router)
+app.include_router(internal_router)
 
 
 @app.get("/health")

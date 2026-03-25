@@ -18,6 +18,7 @@ import com.pet.entity.PetEntity;
 import com.pet.repository.AiChatMessageRepository;
 import com.pet.repository.AiChatSessionRepository;
 import com.pet.repository.PetRepository;
+import com.pet.service.ai.AiConversationMemoryCleaner;
 import com.pet.service.ai.AiProvider;
 import com.pet.service.ai.AiServiceChatResponse;
 import java.time.LocalDateTime;
@@ -40,6 +41,7 @@ public class AiChatService {
   private final AiProvider aiProvider;
   private final AiProperties aiProperties;
   private final ObjectMapper objectMapper;
+  private final AiConversationMemoryCleaner aiConversationMemoryCleaner;
 
   public AiChatService(
       PetRepository petRepository,
@@ -47,13 +49,15 @@ public class AiChatService {
       AiChatMessageRepository aiChatMessageRepository,
       AiProvider aiProvider,
       AiProperties aiProperties,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      AiConversationMemoryCleaner aiConversationMemoryCleaner) {
     this.petRepository = petRepository;
     this.aiChatSessionRepository = aiChatSessionRepository;
     this.aiChatMessageRepository = aiChatMessageRepository;
     this.aiProvider = aiProvider;
     this.aiProperties = aiProperties;
     this.objectMapper = objectMapper;
+    this.aiConversationMemoryCleaner = aiConversationMemoryCleaner;
   }
 
   @Transactional(readOnly = true)
@@ -175,6 +179,21 @@ public class AiChatService {
         toMessageResponse(savedAssistantMessage));
   }
 
+  @Transactional
+  public void deleteSession(Long userId, Long sessionId) {
+    AiChatSessionEntity session = requireSession(userId, sessionId);
+    try {
+      // 先删 AIService 里的 Redis 短期记忆，再删数据库。
+      // 这样可以避免数据库会话已经删除，但 Redis 里仍残留旧上下文窗口。
+      aiConversationMemoryCleaner.clearConversationMemory(String.valueOf(sessionId), userId);
+    } catch (Exception e) {
+      throw new BusinessException(ApiError.AI_CHAT_MEMORY_CLEANUP_FAILED, HttpStatus.BAD_GATEWAY);
+    }
+
+    aiChatMessageRepository.deleteBySessionId(sessionId);
+    aiChatSessionRepository.delete(session);
+  }
+
   private void validateSessionUserMessageLimit(AiChatSessionEntity session) {
     Integer max = aiProperties.getSessionMaxUserMessages();
     if (max == null || max <= 0) {
@@ -226,6 +245,7 @@ public class AiChatService {
         state.getModel(),
         state.getTokens(),
         state.getCreatedAt(),
+        payload.followUp(),
         payload.intent(),
         payload.riskLevel(),
         payload.checklist(),
@@ -268,7 +288,8 @@ public class AiChatService {
 
   /**
    * assistant 正文优先用结构化 payload 里的 answer。
-   * 这样即使历史 content 曾经误存为整段 JSON，也能稳定抽取出正文。
+   *
+   * <p>这样即使历史 content 曾经误存为整段 JSON，也能稳定抽取出正文。
    */
   private String normalizeAssistantContent(String content, String structuredPayload) {
     StructuredAssistantPayload payload = parseStructuredPayload("assistant", structuredPayload, content);
@@ -319,6 +340,7 @@ public class AiChatService {
                   card.items() == null ? List.of() : card.items()))
               .toList();
       return new StructuredAssistantPayload(
+          payload.followUp() != null && payload.followUp(),
           payload.intent() == null ? "UNKNOWN" : payload.intent(),
           payload.answer(),
           payload.riskLevel(),
@@ -393,6 +415,7 @@ public class AiChatService {
    * <p>这里不额外暴露成独立 DTO，避免把解析逻辑散落到多个地方。
    */
   private record StructuredAssistantPayload(
+      boolean followUp,
       String intent,
       String answer,
       String riskLevel,
@@ -405,6 +428,7 @@ public class AiChatService {
   ) {
     private static StructuredAssistantPayload empty() {
       return new StructuredAssistantPayload(
+          false,
           "UNKNOWN",
           null,
           null,

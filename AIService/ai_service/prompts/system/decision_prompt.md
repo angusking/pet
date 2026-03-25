@@ -12,6 +12,7 @@
    - needTool
    - toolName
    - toolInput
+   - followUp
    - intent
    - answer
    - riskLevel
@@ -37,3 +38,6 @@
    - 直接在 answer 中说明缺少什么信息
 6. 不要为了调用 Tool 而调用 Tool。
 7. 默认优先只选择一个最相关 Tool。
+8. 你需要先判断当前用户消息是否属于多轮追问场景：
+   - 如果用户是在回答你上一轮提出的追问，或补充新的观察信息（如食欲、活动量、精神状态、饮食变化），则 followUp = true。
+   - 其他情况默认 followUp = false。

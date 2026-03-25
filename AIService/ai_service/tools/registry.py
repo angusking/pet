@@ -1,7 +1,8 @@
 """Tool 注册表。
 
-当前阶段只真正接入体重分析 Tool，但注册表从一开始就按“多 Tool 可扩展”设计。
-这样后续新增地点查询、服务查询、用品推荐时，只需要在这里补定义和实例。
+当前阶段只有体重分析 Tool 真正接入，但注册表从一开始就按“多 Tool 可扩展”方式设计。
+这样后续新增地点查询、服务查询、用品推荐时，只需要在这里补充定义和实例，
+不需要再回到编排主流程里堆新的 if / else。
 """
 
 from ai_service.core.settings import Settings
@@ -10,7 +11,7 @@ from ai_service.tools.weight_analysis.tool import WeightAnalysisTool
 
 
 class ToolRegistry:
-    """集中管理所有 Tool 的定义与实例。"""
+    """集中管理所有 Tool 的定义、开关状态和运行实例。"""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -21,14 +22,14 @@ class ToolRegistry:
         return [definition for definition in self._definitions if definition.enabled]
 
     def get_tool(self, tool_name: str) -> ToolDefinition | None:
-        """按名称查找 Tool 定义。"""
+        """按名称查找当前可执行的 Tool。"""
         for definition in self._definitions:
             if definition.name == tool_name and definition.enabled:
                 return definition
         return None
 
     def build_registry_prompt_text(self) -> str:
-        """把注册表转换成适合喂给第一轮决策模型的文本。"""
+        """把注册表转换为适合喂给第一轮决策模型的说明文本。"""
         sections: list[str] = []
         for index, definition in enumerate(self.list_enabled_tools(), start=1):
             lines = [
@@ -55,7 +56,7 @@ class ToolRegistry:
         return [
             ToolDefinition(
                 name="weight_analysis",
-                description="根据宠物最近体重记录分析当前体重、较前一次变化和整体趋势。",
+                description="先读取宠物最近体重记录，再由 Tool 内部的 LLM 分析当前体重变化和整体趋势。",
                 when_to_use=[
                     "用户明确询问宠物最近体重、胖了没有、瘦了没有、增重、减重或体重趋势。",
                     "用户希望结合历史体重记录判断近期变化。",
@@ -70,7 +71,7 @@ class ToolRegistry:
                     "只是泛泛咨询喂养建议，没有要求分析体重记录。",
                 ],
                 notes=[
-                    "当前版本默认拉取最近 10 次体重记录。",
+                    "当前版本默认拉取最近 10 次体重记录，再由 Tool 内部调用 LLM 做趋势分析。",
                     "分析结果只做趋势解释，不做医学诊断。",
                 ],
                 tool=weight_tool,
@@ -112,7 +113,7 @@ class ToolRegistry:
                     "用户明确在问用品、商品或推荐购买内容。",
                 ],
                 required_inputs=[
-                    "最好提供 petId 或至少有明确宠物类型和需求描述。",
+                    "最好提供 petId，或至少有明确宠物类型和需求描述。",
                 ],
                 when_not_to_use=[
                     "用户问题不是商品推荐。",
