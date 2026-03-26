@@ -1,18 +1,19 @@
 """聊天编排入口。
 
-这次重构后的核心变化：
-1. 第一轮先做 Tool 决策
-2. 不需要 Tool 时，直接返回第一轮结果
-3. 需要 Tool 时，先调 Tool，再进入第二轮生成最终回答
+当前主链路已经升级为：
+1. 先做 Question Rewrite 前置标准化
+2. 再做第一轮 Tool 决策
+3. 需要 Tool 时执行 Tool
+4. 最后生成用户可见回答
 """
 
 import json
-from typing import Any
 from time import perf_counter
+from typing import Any
 
 from ai_service.capabilities.decision_service import DecisionService
+from ai_service.capabilities.question_rewrite_service import QuestionRewriteService
 from ai_service.capabilities.rag_service import RagService
-from ai_service.capabilities.rewrite_service import RewriteService
 from ai_service.capabilities.safety_service import SafetyService
 from ai_service.capabilities.tool_service import ToolService
 from ai_service.core.logging import get_logger
@@ -46,12 +47,17 @@ class ChatOrchestrator:
         self._prompt_builder = PromptBuilder(settings=settings)
         self._llm_provider = QwenProvider(settings=settings)
         self._log_service = LogService(settings.log_dir)
+        self._question_rewrite_service = QuestionRewriteService(
+            settings=settings,
+            prompt_builder=self._prompt_builder,
+            llm_provider=self._llm_provider,
+            log_service=self._log_service,
+        )
         self._decision_service = DecisionService(
             prompt_builder=self._prompt_builder,
             llm_provider=self._llm_provider,
             log_service=self._log_service,
         )
-        self._rewrite_service = RewriteService()
         self._rag_service = RagService()
         self._tool_service = ToolService(settings=settings)
         self._safety_service = SafetyService()
@@ -65,33 +71,35 @@ class ChatOrchestrator:
         model_name = self._settings.qwen_model
         memory_source = "empty"
         decision = None
+        rewrite_result = None
 
         try:
-            # 上下文恢复顺序保持稳定：
-            # Redis 优先，请求里的 recentMessages 第二，backend 内部接口第三。
             context_messages, memory_source = await self._memory_service.load_memory(
                 request.conversationId,
                 user_id=request.userId,
                 fallback_messages=[message.model_dump() for message in request.recentMessages],
             )
 
-            rewritten_query = self._rewrite_service.rewrite(request.message)
-            used_rewrite = rewritten_query != request.message
+            rewrite_result, rewrite_meta = self._question_rewrite_service.rewrite(
+                request=request,
+                context_messages=context_messages,
+            )
+            used_rewrite = rewrite_result.normalizedQuestion != request.message
 
-            rag_context = await self._rag_service.retrieve(rewritten_query)
-            used_rag = bool(rag_context)
+            rag_context = None
+            if rewrite_result.needKnowledgeRetrieval:
+                rag_context = await self._rag_service.retrieve(rewrite_result.normalizedQuestion)
+                used_rag = bool(rag_context)
 
-            # 第一轮先做内部决策，不急着直接生成最终答案。
             decision, decision_llm_result = self._decision_service.decide(
                 request=request,
                 context_messages=context_messages,
-                rewritten_query=rewritten_query,
+                rewrite_result=rewrite_result,
                 rag_context=rag_context,
             )
             model_name = decision_llm_result.get("model", model_name)
 
             if not decision.needTool:
-                # 不需要 Tool 时，第一轮结果就是最终结果。
                 response = ChatResponse(
                     requestId=request.requestId,
                     followUp=decision.followUp,
@@ -106,10 +114,12 @@ class ChatOrchestrator:
                     disclaimer=decision.disclaimer,
                 )
             else:
-                # 需要 Tool 时，先执行 Tool，再进入第二轮最终回答。
                 tool_input = dict(decision.toolInput or {})
                 tool_input["requestId"] = request.requestId
                 tool_input["userMessage"] = request.message
+                # 把 Question Rewrite 结果透传给 Tool，避免 Tool 再重复解析原问题。
+                # 对地点搜索这类强依赖结构化槽位的 Tool，这能明显减少误判。
+                tool_input["rewriteResult"] = rewrite_result.model_dump(mode="json")
                 tool_result = await self._tool_service.invoke(
                     tool_name=decision.toolName or "",
                     tool_input=tool_input,
@@ -119,7 +129,7 @@ class ChatOrchestrator:
                 messages = self._prompt_builder.build_final_messages(
                     request=request,
                     context_messages=context_messages,
-                    rewritten_query=rewritten_query,
+                    rewrite_result=rewrite_result,
                     rag_context=rag_context,
                     tool_result=tool_result,
                 )
@@ -148,7 +158,6 @@ class ChatOrchestrator:
 
             response = self._safety_service.enforce(response=response, original_query=request.message)
 
-            # 只有拿到有效 assistant 回复后，才把这一轮写回短期记忆。
             await self._memory_service.save_memory(
                 conversation_id=request.conversationId,
                 user_message=request.message,
@@ -164,6 +173,12 @@ class ChatOrchestrator:
                 usage={
                     "memorySource": memory_source,
                     "contextMessageCount": len(context_messages),
+                    "rewriteIntent": rewrite_result.intentType.value if rewrite_result else "unknown",
+                    "rewriteSource": rewrite_result.source.value if rewrite_result else "fallback",
+                    "rewriteConfidence": rewrite_result.confidence if rewrite_result else 0.0,
+                    "rewriteNeedKnowledgeRetrieval": rewrite_result.needKnowledgeRetrieval if rewrite_result else False,
+                    "rewriteSuggestedTool": rewrite_result.suggestedToolName if rewrite_result else None,
+                    "rewriteMeta": rewrite_meta,
                     "decisionNeedTool": decision.needTool if decision else False,
                     "decisionToolName": decision.toolName if decision else None,
                 },
@@ -233,14 +248,7 @@ class ChatOrchestrator:
             )
 
     def _normalize_llm_payload(self, request_id: str, content: str) -> dict[str, Any]:
-        """对模型输出做两层兜底归一化。
-
-        当前线上观察到的异常格式主要有两种：
-        1. 正常格式：顶层就是目标 JSON
-        2. 嵌套格式：顶层 JSON 的 answer 字段里又塞了一整段 JSON 字符串
-
-        这里统一把第 2 种拍平，避免后端和前端继续收到“JSON 套 JSON”的脏结构。
-        """
+        """对模型输出做两层兜底归一化。"""
         data = json.loads(content)
         if not isinstance(data, dict):
             raise ValueError("llm output root is not an object")
@@ -249,7 +257,6 @@ class ChatOrchestrator:
         if nested is None:
             return data
 
-        # 外层字段优先保留 requestId；真正业务字段优先取内层。
         merged = dict(data)
         merged.update(nested)
         if "requestId" not in merged or not merged.get("requestId"):

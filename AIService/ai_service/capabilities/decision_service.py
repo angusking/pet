@@ -12,6 +12,7 @@ from ai_service.core.logging import get_logger
 from ai_service.prompts.prompt_builder import PromptBuilder
 from ai_service.providers.llm.qwen_provider import QwenProvider
 from ai_service.schemas.chat_request import ChatRequest
+from ai_service.schemas.question_rewrite import QuestionRewriteResult
 from ai_service.schemas.tool_decision import ToolDecision
 
 logger = get_logger(__name__)
@@ -34,14 +35,14 @@ class DecisionService:
         self,
         request: ChatRequest,
         context_messages: list[dict],
-        rewritten_query: str,
+        rewrite_result: QuestionRewriteResult,
         rag_context: str | None,
     ) -> tuple[ToolDecision, dict]:
         """调用第一轮决策模型，并返回解析结果及原始模型输出。"""
         messages = self._prompt_builder.build_decision_messages(
             request=request,
             context_messages=context_messages,
-            rewritten_query=rewritten_query,
+            rewrite_result=rewrite_result,
             rag_context=rag_context,
         )
         try:
@@ -70,7 +71,7 @@ class DecisionService:
                 needTool=False,
                 toolName=None,
                 toolInput=None,
-                followUp=False,
+                followUp=rewrite_result.followUp,
                 intent="UNKNOWN",
                 answer=content or "暂时未获得有效结果，请稍后重试。",
             )

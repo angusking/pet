@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     qwen_model: str = Field(default="qwen-plus", alias="QWEN_MODEL")
     qwen_timeout_seconds: int = Field(default=30, alias="QWEN_TIMEOUT_SECONDS")
 
+    # 高德地图 Web Service 配置。地点搜索 Tool 直接访问第三方接口，
+    # 这里集中管理 Key、地址和默认返回条数，避免在 Tool 内写死。
+    amap_web_service_key: str = Field(default="", alias="AMAP_WEB_SERVICE_KEY")
+    amap_base_url: str = Field(default="https://restapi.amap.com", alias="AMAP_BASE_URL")
+    amap_search_page_size: int = Field(default=5, alias="AMAP_SEARCH_PAGE_SIZE")
+
     # Prompt 分层文件路径。
     base_system_prompt_file: str = Field(
         default="./ai_service/prompts/system/base_system_prompt.md",
@@ -52,6 +58,10 @@ class Settings(BaseSettings):
     decision_prompt_file: str = Field(
         default="./ai_service/prompts/system/decision_prompt.md",
         alias="DECISION_PROMPT_FILE",
+    )
+    question_rewrite_prompt_file: str = Field(
+        default="./ai_service/prompts/system/question_rewrite_prompt.md",
+        alias="QUESTION_REWRITE_PROMPT_FILE",
     )
     final_response_prompt_file: str = Field(
         default="./ai_service/prompts/system/final_response_prompt.md",
@@ -66,9 +76,9 @@ class Settings(BaseSettings):
         alias="WEIGHT_ANALYSIS_TOOL_PROMPT_FILE",
     )
 
-    # Tool 启用列表。当前默认只启用体重分析，其他 Tool 先预留注册位。
+    # Tool 启用列表。当前默认启用体重分析和地点搜索，其它 Tool 继续保留扩展位。
     tool_enabled_list: list[str] = Field(
-        default_factory=lambda: ["weight_analysis"],
+        default_factory=lambda: ["weight_analysis", "location_search"],
         alias="TOOL_ENABLED_LIST",
     )
     weight_analysis_limit: int = Field(default=10, alias="WEIGHT_ANALYSIS_LIMIT")

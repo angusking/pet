@@ -1,10 +1,9 @@
 """Prompt 构建器。
 
-这次重构把 Prompt 拆成两轮：
-1. 第一轮只做 Tool 决策
-2. 第二轮在拿到 Tool 结果后生成最终回答
-
-这样后续扩展更多 Tool 时，不需要再把所有规则堆进一个 prompt 文件里。
+当前编排链路拆成三类 prompt：
+1. Question Rewrite：只负责标准化与结构化理解
+2. Decision：只负责判断是否需要 Tool
+3. Final Response：在拿到 Tool 结果后生成最终回答
 """
 
 from pathlib import Path
@@ -12,30 +11,47 @@ from typing import Any
 
 from ai_service.core.settings import Settings
 from ai_service.schemas.chat_request import ChatRequest
+from ai_service.schemas.question_rewrite import QuestionRewriteResult
 from ai_service.tools.registry import ToolRegistry
 
 
 class PromptBuilder:
-    """统一组织第一轮和第二轮的模型输入。"""
+    """统一组织 Rewrite、Decision 和 Final Response 的模型输入。"""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._tool_registry = ToolRegistry(settings=settings)
 
+    def build_question_rewrite_messages(
+        self,
+        request: ChatRequest,
+        context_messages: list[dict],
+    ) -> list[dict[str, str]]:
+        """构建 Question Rewrite 前置模块的 messages。"""
+        messages = [
+            {"role": "system", "content": self._load_prompt(self._settings.base_system_prompt_file)},
+            {"role": "system", "content": self._load_prompt(self._settings.question_rewrite_prompt_file)},
+        ]
+        messages.extend(context_messages)
+        messages.append(
+            {
+                "role": "user",
+                "content": self._build_question_rewrite_context_text(request=request),
+            }
+        )
+        return messages
+
     def build_decision_messages(
         self,
         request: ChatRequest,
         context_messages: list[dict],
-        rewritten_query: str,
+        rewrite_result: QuestionRewriteResult,
         rag_context: str | None,
     ) -> list[dict[str, str]]:
         """构建第一轮“是否调用 Tool”的 messages。"""
         messages = [
             {"role": "system", "content": self._load_prompt(self._settings.base_system_prompt_file)},
-            {
-                "role": "system",
-                "content": self._build_tool_registry_prompt(),
-            },
+            {"role": "system", "content": self._build_tool_registry_prompt()},
             {"role": "system", "content": self._load_prompt(self._settings.decision_prompt_file)},
         ]
         messages.extend(context_messages)
@@ -44,7 +60,7 @@ class PromptBuilder:
                 "role": "user",
                 "content": self._build_context_text(
                     request=request,
-                    rewritten_query=rewritten_query,
+                    rewrite_result=rewrite_result,
                     rag_context=rag_context,
                     tool_result=None,
                 ),
@@ -56,7 +72,7 @@ class PromptBuilder:
         self,
         request: ChatRequest,
         context_messages: list[dict],
-        rewritten_query: str,
+        rewrite_result: QuestionRewriteResult,
         rag_context: str | None,
         tool_result: dict[str, Any] | None,
     ) -> list[dict[str, str]]:
@@ -71,7 +87,7 @@ class PromptBuilder:
                 "role": "user",
                 "content": self._build_context_text(
                     request=request,
-                    rewritten_query=rewritten_query,
+                    rewrite_result=rewrite_result,
                     rag_context=rag_context,
                     tool_result=tool_result,
                 ),
@@ -79,10 +95,32 @@ class PromptBuilder:
         )
         return messages
 
+    def _build_question_rewrite_context_text(self, request: ChatRequest) -> str:
+        """构建 Question Rewrite 阶段需要的最小上下文。"""
+        lines = [
+            f"requestId: {request.requestId}",
+            f"conversationId: {request.conversationId}",
+            f"userId: {request.userId}",
+            f"originalMessage: {request.message}",
+        ]
+
+        if request.pet is not None:
+            lines.extend(
+                [
+                    f"pet.petId: {request.pet.petId}",
+                    f"pet.name: {request.pet.name}",
+                    f"pet.type: {request.pet.type}",
+                    f"pet.age: {request.pet.age}",
+                    f"pet.weight: {request.pet.weight}",
+                ]
+            )
+
+        return "\n".join(lines)
+
     def _build_context_text(
         self,
         request: ChatRequest,
-        rewritten_query: str,
+        rewrite_result: QuestionRewriteResult,
         rag_context: str | None,
         tool_result: dict[str, Any] | None,
     ) -> str:
@@ -92,7 +130,8 @@ class PromptBuilder:
             f"conversationId: {request.conversationId}",
             f"userId: {request.userId}",
             f"originalMessage: {request.message}",
-            f"rewrittenMessage: {rewritten_query}",
+            f"rewriteResult: {rewrite_result.model_dump_json()}",
+            f"rewrittenMessage: {rewrite_result.normalizedQuestion}",
         ]
 
         if request.pet is not None:

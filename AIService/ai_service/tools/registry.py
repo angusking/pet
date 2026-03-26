@@ -7,6 +7,7 @@
 
 from ai_service.core.settings import Settings
 from ai_service.tools.definitions import ToolDefinition
+from ai_service.tools.location_search.tool import LocationSearchTool
 from ai_service.tools.weight_analysis.tool import WeightAnalysisTool
 
 
@@ -53,6 +54,7 @@ class ToolRegistry:
         enabled_tools = set(self._settings.tool_enabled_list)
 
         weight_tool = WeightAnalysisTool(settings=self._settings)
+        location_tool = LocationSearchTool(settings=self._settings)
         return [
             ToolDefinition(
                 name="weight_analysis",
@@ -79,17 +81,24 @@ class ToolRegistry:
             ),
             ToolDefinition(
                 name="location_search",
-                description="根据地点信息查询附近相关地点，例如宠物医院或门店。",
+                description="根据地点描述和地点类型关键词，调用高德文本搜索查询附近相关地点，例如宠物医院、宠物店或洗护门店。",
                 when_to_use=[
-                    "用户在问附近哪里有宠物医院、门店或某类地点。",
+                    "用户在问某个城市、区域、商圈或地址附近哪里有宠物医院、门店或某类服务地点。",
+                    "用户希望查找和地理位置强相关的线下地点信息。",
                 ],
                 required_inputs=[
-                    "需要明确地点信息，例如城市、区域、地址或坐标。",
+                    "需要明确地点信息，例如城市、区域、商圈或地址片段。",
+                    "最好提供具体地点类型关键词，例如宠物医院、宠物店、洗护门店。",
                 ],
                 when_not_to_use=[
-                    "用户没有提供地点信息。",
+                    "用户只有“附近”这类相对描述，但没有提供可定位的城市或区域。",
                     "用户问题与地理位置无关。",
                 ],
+                notes=[
+                    "当前版本先接高德文本搜索接口，适合处理“浦东附近宠物医院”这类文本区域查询。",
+                    "如果缺少明确地点，Tool 会返回 missing_location，而不是盲目调用第三方搜索。",
+                ],
+                tool=location_tool,
                 enabled="location_search" in enabled_tools,
             ),
             ToolDefinition(
