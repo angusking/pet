@@ -6,6 +6,10 @@ target/
 node_modules/
 dist/
 
+# Python
+__pycache__/
+*.py[cod]
+
 # IDE
 .idea/
 *.iml
@@ -26,3 +30,4 @@ redis_data/
 AIService/.env
 /AIService/TEMP_LEARNING_GUIDE.md
 /deploy/exports/
+/AIService/TEMP_RAG_LEARNING_GUIDE.md
