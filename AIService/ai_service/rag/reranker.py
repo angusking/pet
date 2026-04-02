@@ -19,7 +19,18 @@ from ai_service.rag.schemas import RetrievedChunk
 
 
 class LightweightReranker:
-    """基于关键词重合和字段权重的轻量重排器。"""
+    """基于关键词重合和字段权重的轻量重排器。
+
+    它的定位非常明确：
+    - 不是替代专业 Cross-Encoder reranker；
+    - 而是在“不额外引入大模型成本”的前提下，
+      把向量召回结果重新排得更符合当前问题主题。
+
+    当前特别适合解决的场景是：
+    - 向量召回语义接近，但主题不够聚焦；
+    - 图书型知识库里，章节标题比正文更能代表主题；
+    - 中文问题里存在“长期只吃肉/怎么喂/为什么不能”这类短语，需要字面命中增强。
+    """
 
     _STOP_TERMS = {
         "为什么",
@@ -74,6 +85,14 @@ class LightweightReranker:
         return ranked[:top_k]
 
     def _score_chunk(self, query_terms: list[str], hint_terms: list[str], chunk: RetrievedChunk) -> float:
+        """给单个候选片段打综合分。
+
+        分数组成大致分为三层：
+        1. 原始向量分：保留语义检索的基本盘；
+        2. 标题/章节命中加权：让主题更聚焦的片段靠前；
+        3. 业务启发式修正：对喂养、营养等问题做轻量领域偏置。
+        """
+
         score = float(chunk.score)
 
         title_text = self._normalize(
@@ -176,6 +195,13 @@ class LightweightReranker:
         return deduped
 
     def _build_hint_terms(self, query: str) -> list[str]:
+        """根据问题语义注入一组领域提示词。
+
+        这里本质上是在做“极轻量的规则扩展词”：
+        用户问题里不一定会直接出现“蛋白质/脂肪/维生素”，
+        但如果已经判断是喂养问题，就可以把这些主题词加入重排考虑。
+        """
+
         normalized = self._normalize(query)
         if not any(term in normalized for term in self._FEEDING_QUERY_HINTS):
             return []

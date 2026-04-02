@@ -1,4 +1,13 @@
-"""本地知识库管理接口。"""
+"""本地知识库管理接口。
+
+这组接口不是面向普通聊天用户的，而是面向开发、运维或调试阶段。
+它的作用是把“知识版本管理”这件事变成显式、可操作的后台能力：
+
+- 查当前激活版本；
+- 查所有版本状态；
+- 构建新版本索引；
+- 切换当前生效版本并热加载。
+"""
 
 from __future__ import annotations
 
@@ -87,7 +96,15 @@ async def switch_version(
     knowledge_manager: KnowledgeManager = Depends(get_knowledge_manager),
     rag_service: RagService = Depends(get_rag_service),
 ) -> dict[str, str]:
-    """切换当前激活版本，并立即触发 Retriever 热加载。"""
+    """切换当前激活版本，并立即触发 Retriever 热加载。
+
+    这里故意把“写 active_kb.json”和“在线重载 Retriever”放在同一个接口里，
+    目的是让版本切换对外表现为一次原子操作：
+    - 磁盘状态切过去；
+    - 在线检索也立刻切过去。
+
+    如果重载失败，会尽量回滚到旧版本，减少“磁盘已切换但进程内还没切换”的不一致窗口。
+    """
 
     previous_active_version = knowledge_manager.get_active_version()
     try:

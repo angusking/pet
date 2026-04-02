@@ -49,6 +49,14 @@ class LocalEmbeddingProvider:
         return vectors[0]
 
     def _encode(self, texts: Iterable[str]) -> list[list[float]]:
+        """统一的编码入口。
+
+        无论是构建索引还是在线查询，最终都会走到这里。
+        这样做的意义是：
+        - 批量文档编码和单条 query 编码共享同一套模型配置；
+        - 如果后面要加日志、批大小控制、异常兜底，只需要改一个地方。
+        """
+
         model = self._get_model()
         values = list(texts)
         if not values:
@@ -64,6 +72,12 @@ class LocalEmbeddingProvider:
         return embeddings.tolist()
 
     def _get_model(self):
+        """懒加载并缓存 embedding 模型。
+
+        首次真正需要 embedding 时才加载模型，后续重复复用同一个实例。
+        这对本地模型尤其重要，否则服务一启动就会占用较多内存和启动时间。
+        """
+
         if self._model is not None:
             return self._model
         if SentenceTransformer is None:
@@ -78,4 +92,3 @@ class LocalEmbeddingProvider:
         except Exception as exc:
             raise IndexBuildError(f"加载 embedding 模型失败: {model_name}") from exc
         return self._model
-

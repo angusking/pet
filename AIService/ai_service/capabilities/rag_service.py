@@ -20,7 +20,19 @@ logger = get_logger(__name__)
 
 
 class RagService:
-    """检索增强服务。"""
+    """检索增强服务。
+
+    这是编排层真正接触到的 RAG 入口。
+    上层不需要知道：
+    - 当前使用的是哪一版知识库；
+    - 索引文件如何组织；
+    - FAISS 如何检索；
+    - 重排规则如何打分。
+
+    上层只需要知道两件事：
+    1. 给我一个问题，我尽量返回适合写进 Prompt 的知识上下文；
+    2. 当知识版本切换时，我能重新加载。
+    """
 
     _MAX_CHUNK_TEXT_LENGTH = 500
     _FETCH_MULTIPLIER = 3
@@ -39,6 +51,8 @@ class RagService:
         而不是再自行理解多层嵌套对象。
         """
 
+        # 如果环境配置里关闭了 RAG，这一层直接返回 None，
+        # 让聊天链路退化成“无知识检索”的正常模式。
         if not self._enabled:
             return None
         try:
@@ -55,10 +69,15 @@ class RagService:
         if not fetched_chunks:
             return None
 
+        # Retriever 返回的是原始候选；这里再做一次轻量重排，
+        # 让最终进入 Prompt 的上下文尽量围绕当前问题主题展开。
         chunks = self._reranker.rerank(query=query, chunks=fetched_chunks, top_k=self._top_k)
 
         lines: list[str] = []
         for index, chunk in enumerate(chunks, start=1):
+            # 这里不直接把原始 JSON 结构塞给 Prompt，
+            # 而是转成对 LLM 更友好的“半结构化文本块”。
+            # 这样既保留来源、页码、质量分等信息，也避免 Prompt 里嵌套过深。
             lines.append(f"[{index}] score={chunk.score:.4f}")
             if chunk.title:
                 lines.append(f"标题：{chunk.title}")
@@ -93,6 +112,12 @@ class RagService:
         return self._retriever.current_version()
 
     def _truncate_text(self, text: str) -> str:
+        """控制单个 chunk 写入 Prompt 的长度。
+
+        如果不做截断，top_k 个长 chunk 很容易把 Prompt 上下文撑爆，
+        反而让模型抓不住重点。这里先做保守裁剪，优先保证“多条候选都能进去”。
+        """
+
         normalized = text.strip()
         if len(normalized) <= self._MAX_CHUNK_TEXT_LENGTH:
             return normalized

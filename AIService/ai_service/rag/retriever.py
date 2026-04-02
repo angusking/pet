@@ -42,7 +42,12 @@ class FaissRetriever:
         self._current_version: str | None = None
 
     def load_active(self) -> str | None:
-        """启动时加载当前激活版本。"""
+        """启动时加载当前激活版本。
+
+        这一步通常在应用启动阶段调用。
+        如果 active_kb.json 还不存在，不会报错，而是让服务以“RAG 未就绪”的状态启动。
+        这样聊天主链路仍然能工作，只是不会使用知识检索。
+        """
 
         active_version = self._knowledge_manager.get_active_version()
         if not active_version:
@@ -86,7 +91,19 @@ class FaissRetriever:
             return self._current_version
 
     def search(self, query: str, top_k: int) -> list[RetrievedChunk]:
-        """执行向量检索。"""
+        """执行向量检索。
+
+        当前流程是：
+        1. 把查询做 embedding；
+        2. 在当前已加载的 FAISS 索引里做 top_k 召回；
+        3. 根据 row_id 反查 metadata；
+        4. 组装成上层可直接消费的 RetrievedChunk。
+
+        注意这里还没有做重排。
+        重排放在 RagService 里完成，原因是：
+        - Retriever 只负责“把候选召回出来”；
+        - RagService 负责“把候选整理成更适合 Prompt 的最终上下文”。
+        """
 
         if not query.strip():
             return []
@@ -98,6 +115,8 @@ class FaissRetriever:
                 raise RetrieverNotReadyError("Retriever 尚未加载任何激活版本。")
             index = self._index
             metadata = list(self._metadata)
+            # 这里复制 metadata 引用列表，而不是持锁执行整个查询。
+            # 目的是尽量缩短锁持有时间，避免热加载时和在线查询互相阻塞太久。
 
         query_vector = self._embedding_provider.embed_query(query)
         query_array = np.asarray([query_vector], dtype="float32")

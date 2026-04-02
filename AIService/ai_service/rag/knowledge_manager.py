@@ -14,7 +14,21 @@ logger = get_logger(__name__)
 
 
 class KnowledgeManager:
-    """管理知识库版本目录、active_version 和完整性校验。"""
+    """管理知识库版本目录、active_version 和完整性校验。
+
+    这一层只关心“版本状态”，不关心 embedding、FAISS 检索或 Prompt。
+    可以把它理解成 RAG 子系统里的“版本仓库管理员”：
+
+    1. 知道知识文件放在哪里；
+    2. 知道索引文件放在哪里；
+    3. 知道当前 active_version 是谁；
+    4. 能判断某个版本是否已经达到可检索状态。
+
+    这样做的好处是把“版本管理”和“检索执行”解耦：
+    - 检索器只需要关心如何读取一个 ready 版本；
+    - 构建器只需要关心如何产出一个 ready 版本；
+    - API 层只需要调用这里提供的状态判断方法。
+    """
 
     _KNOWLEDGE_FILE_NAME = "rag_chunks.jsonl"
     _INDEX_FILE_NAME = "faiss.index"
@@ -26,6 +40,7 @@ class KnowledgeManager:
         self._knowledge_root = self._resolve_path(settings.rag_knowledge_dir)
         self._index_root = self._resolve_path(settings.rag_index_dir)
         self._active_file = self._resolve_path(settings.rag_active_file)
+        # 启动时保证目录存在，避免后续每次构建或切换前都重复判断。
         self._knowledge_root.mkdir(parents=True, exist_ok=True)
         self._index_root.mkdir(parents=True, exist_ok=True)
         self._active_file.parent.mkdir(parents=True, exist_ok=True)
@@ -87,6 +102,8 @@ class KnowledgeManager:
         } | {
             path.name for path in self._index_root.iterdir() if path.is_dir()
         }
+        # 这里返回的是聚合视图，而不是简单目录名列表。
+        # API 层可以直接把结果透出给前端或运维接口，不需要再做二次拼装。
         return [
             self._build_version_info(version_name, is_active=(version_name == active_version))
             for version_name in sorted(versions)
@@ -127,6 +144,15 @@ class KnowledgeManager:
         return self.get_index_dir(version) / self._MANIFEST_FILE_NAME
 
     def _build_version_info(self, version: str, is_active: bool = False) -> KnowledgeVersionInfo:
+        """汇总单个版本的文件存在性与运行状态。
+
+        当前状态定义是：
+        - ready：知识文件和索引文件都完整；
+        - knowledge_only：只有知识文件，尚未构建索引；
+        - broken：索引文件残缺，或者只剩部分构建产物；
+        - unknown：既没有知识文件也没有索引目录，通常只会在脏目录扫描时出现。
+        """
+
         knowledge_file = self.get_knowledge_file(version)
         index_file = self.get_index_file(version)
         metadata_file = self.get_metadata_file(version)
@@ -155,6 +181,14 @@ class KnowledgeManager:
         )
 
     def _read_manifest(self, path: Path) -> IndexManifest | None:
+        """读取 manifest。
+
+        manifest 本身不是检索必需文件，但它对运维排查很有帮助：
+        - 知道当前索引是何时构建的；
+        - 知道用了哪个 embedding 模型；
+        - 知道进入索引的 chunk 数量。
+        """
+
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             return IndexManifest.model_validate(payload)
@@ -165,4 +199,3 @@ class KnowledgeManager:
     def _resolve_path(self, path_text: str) -> Path:
         path = Path(path_text)
         return path if path.is_absolute() else BASE_DIR / path
-

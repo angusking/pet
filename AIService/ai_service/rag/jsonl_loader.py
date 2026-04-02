@@ -37,7 +37,16 @@ class JsonlKnowledgeLoader:
     }
 
     def load(self, file_path: Path) -> list[RagChunk]:
-        """读取并校验知识文件。"""
+        """读取并校验知识文件。
+
+        当前约定是一行一个 JSON 对象。
+        读取阶段做两件事：
+        1. 校验每一行是不是合法 JSON；
+        2. 把多种来源格式归一成统一的 RagChunk。
+
+        这里故意把“兼容不同知识文件字段”的逻辑放在 loader，
+        而不是散落到构建器或检索器里，目的是让数据入口保持单一。
+        """
 
         if not file_path.exists():
             raise IndexBuildError(f"知识文件不存在: {file_path}")
@@ -66,6 +75,13 @@ class JsonlKnowledgeLoader:
         return chunks
 
     def _normalize_payload(self, payload: dict) -> RagChunk:
+        """把单条原始 JSON 映射成内部标准结构。
+
+        这个方法的核心价值是“解耦知识源格式和内部索引格式”：
+        - 外部文件可以继续保留 `chunk_id/content` 这类字段；
+        - 内部统一使用 `id/text/title/category/metadata`。
+        """
+
         chunk_id = str(payload.get("id") or payload.get("chunk_id") or "").strip()
         text = str(payload.get("text") or payload.get("content") or "").strip()
         if not chunk_id or not text:
@@ -117,6 +133,15 @@ class JsonlKnowledgeLoader:
         return str(payload.get("chunk_type") or "").strip()
 
     def _build_metadata(self, payload: dict) -> dict:
+        """收集需要长期保留的扩展字段。
+
+        这些字段不会直接参与 Pydantic 顶层结构定义，
+        但会在三个地方发挥作用：
+        1. 构建 embedding 文本时提供章节信息；
+        2. 检索结果回显时展示页码、章节、质量分；
+        3. 后续如果要继续做 rerank 或来源溯源，可以直接复用。
+        """
+
         metadata = {
             "doc_id": str(payload.get("doc_id") or "").strip(),
             "chunk_type": str(payload.get("chunk_type") or "").strip(),
@@ -131,6 +156,7 @@ class JsonlKnowledgeLoader:
         }
 
         # 把未来可能扩展的新字段也保留下来，避免再次改 schema。
+        # 这样知识生产链路新增字段时，RAG 端通常不需要立刻跟着改代码。
         for key, value in payload.items():
             if key in self._META_EXCLUDE_KEYS:
                 continue
@@ -159,4 +185,3 @@ class JsonlKnowledgeLoader:
         text = re.sub(r"[（(][^）)]*[）)]", " ", text)
         text = re.sub(r"\s+", " ", text)
         return text.strip(" /")
-
