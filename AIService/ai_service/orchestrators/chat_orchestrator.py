@@ -33,7 +33,12 @@ logger = get_logger(__name__)
 class ChatOrchestrator:
     """负责一次 AI 聊天请求的完整编排。"""
 
-    def __init__(self, settings: Settings, memory_provider: MemoryProvider) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        memory_provider: MemoryProvider,
+        rag_service: RagService,
+    ) -> None:
         self._settings = settings
         self._memory_service = MemoryService(
             memory_provider=memory_provider,
@@ -58,7 +63,9 @@ class ChatOrchestrator:
             llm_provider=self._llm_provider,
             log_service=self._log_service,
         )
-        self._rag_service = RagService()
+        # RAG 能力由 main.py 统一初始化并注入。
+        # 这样版本切换、热加载和管理接口操作都会直接作用于同一个 Retriever 实例。
+        self._rag_service = rag_service
         self._tool_service = ToolService(settings=settings)
         self._safety_service = SafetyService()
 

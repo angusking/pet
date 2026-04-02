@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     qwen_model: str = Field(default="qwen-plus", alias="QWEN_MODEL")
     qwen_timeout_seconds: int = Field(default=30, alias="QWEN_TIMEOUT_SECONDS")
 
+    # 本地 RAG 配置。这里统一约束知识文件、索引文件和激活版本文件的目录，
+    # 让版本切换、索引构建和在线检索都围绕同一套路径运行。
+    rag_enabled: bool = Field(default=True, alias="RAG_ENABLED")
+    rag_data_dir: str = Field(default="./data", alias="RAG_DATA_DIR")
+    rag_active_file: str = Field(default="./data/active_kb.json", alias="RAG_ACTIVE_FILE")
+    rag_knowledge_dir: str = Field(default="./data/knowledge", alias="RAG_KNOWLEDGE_DIR")
+    rag_index_dir: str = Field(default="./data/indexes", alias="RAG_INDEX_DIR")
+    rag_top_k: int = Field(default=5, alias="RAG_TOP_K")
+    rag_auto_load_on_start: bool = Field(default=True, alias="RAG_AUTO_LOAD_ON_START")
+    rag_embedding_model: str = Field(default="BAAI/bge-m3", alias="RAG_EMBEDDING_MODEL")
+    rag_embedding_model_path: str = Field(default="", alias="RAG_EMBEDDING_MODEL_PATH")
+
     # 高德地图 Web Service 配置。地点搜索 Tool 直接访问第三方接口，
     # 这里集中管理 Key、地址和默认返回条数，避免在 Tool 内写死。
     amap_web_service_key: str = Field(default="", alias="AMAP_WEB_SERVICE_KEY")

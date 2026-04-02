@@ -17,11 +17,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from ai_service.api.kb_admin import router as kb_admin_router
 from ai_service.api.chat import internal_router, router as chat_router
+from ai_service.capabilities.rag_service import RagService
 from ai_service.core.logging import configure_logging, get_logger
 from ai_service.core.settings import get_settings
 from ai_service.orchestrators.chat_orchestrator import ChatOrchestrator
 from ai_service.providers.memory.redis_memory import RedisMemoryProvider
+from ai_service.rag.embedding_provider import LocalEmbeddingProvider
+from ai_service.rag.index_builder import IndexBuilder
+from ai_service.rag.knowledge_manager import KnowledgeManager
+from ai_service.rag.retriever import FaissRetriever
 
 # 配置和日志在模块加载时初始化一次。
 # 这样后续其他模块拿到的就是同一套配置对象和日志行为。
@@ -47,11 +53,44 @@ async def lifespan(app: FastAPI):
     memory_provider = RedisMemoryProvider(settings)
     await memory_provider.connect()
 
-    orchestrator = ChatOrchestrator(settings=settings, memory_provider=memory_provider)
+    knowledge_manager = KnowledgeManager(settings=settings)
+    embedding_provider = LocalEmbeddingProvider(settings=settings)
+    retriever = FaissRetriever(
+        knowledge_manager=knowledge_manager,
+        embedding_provider=embedding_provider,
+    )
+    index_builder = IndexBuilder(
+        knowledge_manager=knowledge_manager,
+        embedding_provider=embedding_provider,
+    )
+    rag_service = RagService(
+        retriever=retriever,
+        top_k=settings.rag_top_k,
+        enabled=settings.rag_enabled,
+    )
+
+    if settings.rag_enabled and settings.rag_auto_load_on_start:
+        try:
+            loaded_version = retriever.load_active()
+            if loaded_version:
+                logger.info("RAG active version loaded on startup, version=%s", loaded_version)
+            else:
+                logger.info("RAG has no active version on startup")
+        except Exception as exc:
+            logger.warning("RAG auto load failed on startup, error=%s", exc)
+
+    orchestrator = ChatOrchestrator(
+        settings=settings,
+        memory_provider=memory_provider,
+        rag_service=rag_service,
+    )
 
     # 把共享对象挂到 app.state 上，供路由层读取。
     app.state.memory_provider = memory_provider
     app.state.chat_orchestrator = orchestrator
+    app.state.knowledge_manager = knowledge_manager
+    app.state.index_builder = index_builder
+    app.state.rag_service = rag_service
 
     yield
 
@@ -68,6 +107,7 @@ app = FastAPI(
 
 app.include_router(chat_router)
 app.include_router(internal_router)
+app.include_router(kb_admin_router)
 
 
 @app.get("/health")

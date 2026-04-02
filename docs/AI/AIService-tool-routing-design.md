@@ -4,7 +4,7 @@
 
 本次改造把 AIService 从“单轮统一回答”升级为“Question Rewrite 前置层 + 第一轮决策 + Tool 执行 + 第二轮最终回答”的两阶段架构。
 
-当前已落地 `weight_analysis` 和 `location_search`，但整体结构按多 Tool 扩展设计，后续可以继续平滑接入：
+当前已落地 `weight_analysis`、`location_search` 和本地版本化 RAG，整体结构按多能力扩展设计，后续可以继续平滑接入：
 
 - `service_lookup`
 - `product_recommendation`
@@ -30,6 +30,50 @@
       -> 将 Tool 结果注入第二轮 Prompt
       -> 生成最终回答
 ```
+
+## 本地 RAG 版本管理
+
+本地知识库采用“知识文件版本目录 + 独立索引目录 + active_version 切换 + Retriever 热加载”的结构：
+
+```text
+AIService/data/
+├─ knowledge/
+│  └─ {version}/rag_chunks.jsonl
+├─ indexes/
+│  └─ {version}/
+│     ├─ faiss.index
+│     ├─ metadata.json
+│     └─ manifest.json
+└─ active_kb.json
+```
+
+关键原则：
+
+- 不直接覆盖旧版本知识文件
+- 不直接覆盖旧版本索引
+- 新版本索引构建成功后才能切换 active_version
+- Retriever 只使用当前激活版本
+- 切换版本后立即热加载，无需重启服务
+- 旧版本目录保留，便于回滚
+
+对应模块职责如下：
+
+- `KnowledgeManager`
+  - 管理版本目录、active_version、版本校验和版本列表
+- `IndexBuilder`
+  - 读取指定版本 jsonl，生成 embedding，构建 FAISS，写入 metadata 和 manifest
+- `FaissRetriever`
+  - 加载当前激活版本，执行 search，支持 reload(version)
+- `RagService`
+  - 给 `ChatOrchestrator` 提供统一 `retrieve()` 能力
+- `kb_admin` API
+  - 暴露 `/kb/current`、`/kb/versions`、`/kb/rebuild`、`/kb/switch`
+
+依赖安装说明：
+
+- AIService 当前统一使用单一 `requirements.txt`
+- 其中已经包含本地 RAG 所需的 `numpy`、`faiss-cpu`、`sentence-transformers`
+- 为避免 Windows + Python 3.14 下的编译问题，当前建议固定使用 Python 3.12 虚拟环境
 
 ## Question Rewrite 前置层
 
@@ -253,6 +297,12 @@ AIService 关键文件：
 - `ai_service/tools/registry.py`
 - `ai_service/tools/weight_analysis/`
 - `ai_service/tools/location_search/`
+- `ai_service/rag/knowledge_manager.py`
+- `ai_service/rag/index_builder.py`
+- `ai_service/rag/retriever.py`
+- `ai_service/rag/embedding_provider.py`
+- `ai_service/rag/jsonl_loader.py`
+- `ai_service/api/kb_admin.py`
 - `ai_service/providers/backend/pet_weight_provider.py`
 
 Java 后端关键文件：
@@ -275,6 +325,15 @@ Java 后端关键文件：
 - `AMAP_WEB_SERVICE_KEY`
 - `AMAP_BASE_URL`
 - `AMAP_SEARCH_PAGE_SIZE`
+- `RAG_ENABLED`
+- `RAG_DATA_DIR`
+- `RAG_ACTIVE_FILE`
+- `RAG_KNOWLEDGE_DIR`
+- `RAG_INDEX_DIR`
+- `RAG_TOP_K`
+- `RAG_AUTO_LOAD_ON_START`
+- `RAG_EMBEDDING_MODEL`
+- `RAG_EMBEDDING_MODEL_PATH`
 - `TOOL_ENABLED_LIST`
 - `WEIGHT_ANALYSIS_LIMIT`
 - `BACKEND_BASE_URL`

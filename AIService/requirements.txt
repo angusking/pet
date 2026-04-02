@@ -6,3 +6,6 @@ redis==5.2.1
 httpx==0.28.1
 dashscope==1.22.2
 python-dotenv==1.0.1
+numpy==2.2.3
+faiss-cpu==1.10.0
+sentence-transformers==3.4.1

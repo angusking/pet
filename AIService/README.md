@@ -9,6 +9,13 @@ AIService 是独立的 Python AI 编排服务，对 Java 后端暴露统一的 H
 3. 如果不需要 Tool，直接返回结果。
 4. 如果需要 Tool，先执行 Tool，再进入第二轮生成最终回答。
 
+除此之外，AIService 现在还支持本地版本化 RAG 知识库：
+
+1. 每个知识库版本独立存放 `jsonl` 和 FAISS 索引。
+2. 通过 `active_kb.json` 控制当前生效版本。
+3. 支持构建新版本、切换版本和 Retriever 热加载，无需重启服务。
+4. 保留旧版本目录，便于回滚。
+
 同时，AIService 现在会输出“正文 + 结构化字段”两部分信息：
 
 - 正文：`answer`
@@ -66,10 +73,20 @@ pip install -r requirements.txt
 python run.py
 ```
 
+说明：
+
+- 当前 `requirements.txt` 已经包含 AIService 基础依赖和本地 RAG 依赖。
+- 为了避免 Windows + Python 3.14 下的编译问题，当前项目已切换到 Python 3.12 环境。
+- 如果重新创建虚拟环境，建议继续使用 Python 3.12。
+
 ## 主要接口
 
 - `GET /health`
 - `POST /api/ai/chat`
+- `GET /kb/current`
+- `GET /kb/versions`
+- `POST /kb/rebuild`
+- `POST /kb/switch`
 
 ## 关键目录
 
@@ -85,6 +102,76 @@ python run.py
   - 基础系统 Prompt、Question Rewrite Prompt、第一轮决策 Prompt、第二轮最终回答 Prompt
 - `ai_service/prompts/tools`
   - Tool 注册表 Prompt 和 Tool 内部专用 Prompt
+- `ai_service/rag`
+  - 本地知识库版本管理、索引构建、Retriever 和相关 schema
+
+## 本地 RAG 知识库
+
+当前采用版本化目录结构：
+
+```text
+AIService/data/
+├─ knowledge/
+│  └─ {version}/
+│     └─ rag_chunks.jsonl
+├─ indexes/
+│  └─ {version}/
+│     ├─ faiss.index
+│     ├─ metadata.json
+│     └─ manifest.json
+└─ active_kb.json
+```
+
+其中：
+
+- `knowledge/{version}/rag_chunks.jsonl`
+  - 某一版知识分块文件
+- `indexes/{version}/faiss.index`
+  - 该版本对应的向量索引
+- `indexes/{version}/metadata.json`
+  - 向量行号和原始 chunk 的映射
+- `indexes/{version}/manifest.json`
+  - 当前索引版本的概要信息
+- `active_kb.json`
+  - 当前激活版本，例如 `{ "active_version": "pet_v2" }`
+
+当前 loader 已兼容图书切块风格的 `jsonl` 结构，例如：
+
+```json
+{
+  "doc_id": "pet_book_001",
+  "chunk_id": "pet_book_001_p0001_c0001",
+  "content": "......",
+  "source": "宠物疾病现代诊断与治疗操作技术实用手册",
+  "page_start": 1,
+  "page_end": 3,
+  "part_title": "第一篇 ...",
+  "chapter_title": "第一章 ...",
+  "section_title": "第二节 ...",
+  "tags": ["犬", "喂养"],
+  "quality_score": 1.0
+}
+```
+
+也就是说，当前不要求你手动把字段改成 `id/text`，系统会自动把：
+
+- `chunk_id` 映射为内部 `id`
+- `content` 映射为内部 `text`
+
+推荐更新流程：
+
+1. 放入新的 `rag_chunks.jsonl`
+2. 调 `POST /kb/rebuild` 为该版本构建索引
+3. 构建成功后调用 `POST /kb/switch`
+4. Retriever 热加载新版本，在线请求立即生效
+
+当前检索链路采用：
+
+1. FAISS 向量召回
+2. 本地轻量重排
+
+也就是说，系统会先多召回一批候选 chunk，再结合问题和标题/章节/正文的字面匹配做一次轻量排序，
+尽量把更贴近当前问题主题的片段排到前面。
 
 ## 体重分析链路说明
 
@@ -118,6 +205,15 @@ python run.py
 - `AMAP_WEB_SERVICE_KEY`
 - `AMAP_BASE_URL`
 - `AMAP_SEARCH_PAGE_SIZE`
+- `RAG_ENABLED`
+- `RAG_DATA_DIR`
+- `RAG_ACTIVE_FILE`
+- `RAG_KNOWLEDGE_DIR`
+- `RAG_INDEX_DIR`
+- `RAG_TOP_K`
+- `RAG_AUTO_LOAD_ON_START`
+- `RAG_EMBEDDING_MODEL`
+- `RAG_EMBEDDING_MODEL_PATH`
 - `TOOL_ENABLED_LIST`
 - `WEIGHT_ANALYSIS_LIMIT`
 
