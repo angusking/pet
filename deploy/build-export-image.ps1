@@ -1,4 +1,8 @@
-param()
+param(
+  [string]$RegistryHost = "crpi-hj866eohic2eueoi.cn-beijing.personal.cr.aliyuncs.com",
+  [string]$RegistryNamespace = "gj_pet",
+  [string]$RepositoryPrefix = "pet"
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -26,6 +30,18 @@ function Invoke-DockerCommand {
   }
 }
 
+function Read-MenuChoice {
+  param(
+    [Parameter(Mandatory = $true)][string]$Prompt,
+    [Parameter(Mandatory = $true)][string[]]$AllowedValues
+  )
+  $value = (Read-Host $Prompt).Trim()
+  if ($AllowedValues -notcontains $value) {
+    Fail "Invalid option: $value"
+  }
+  return $value
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $aiServiceDir = Join-Path $repoRoot "AIService"
 $frontendDir = Join-Path $repoRoot "frontend"
@@ -44,7 +60,7 @@ Write-Host "  1) aiservice"
 Write-Host "  2) backend"
 Write-Host "  3) frontend"
 Write-Host "  4) all"
-$choice = (Read-Host "Enter option [1/2/3/4]").Trim()
+$choice = Read-MenuChoice -Prompt "Enter option [1/2/3/4]" -AllowedValues @("1", "2", "3", "4")
 
 switch ($choice) {
   "1" { $targets = @("aiservice") }
@@ -54,12 +70,49 @@ switch ($choice) {
   default { Fail "Invalid option: $choice" }
 }
 
-$version = (Read-Host "Enter version tag (example: v1.0.0 or 20260226-01)").Trim()
+$version = (Read-Host "Enter version tag (example: v0.2.0 or 20260404-01)").Trim()
 if ([string]::IsNullOrWhiteSpace($version)) {
   Fail "Version tag cannot be empty."
 }
 
-New-Item -ItemType Directory -Force -Path $exportDir | Out-Null
+Write-Host ""
+Write-Host "Select artifact action after build:" -ForegroundColor Yellow
+Write-Host "  1) export tar only"
+Write-Host "  2) push to Aliyun registry only"
+Write-Host "  3) both"
+$artifactChoice = Read-MenuChoice -Prompt "Enter option [1/2/3]" -AllowedValues @("1", "2", "3")
+
+$shouldExport = $artifactChoice -in @("1", "3")
+$shouldPush = $artifactChoice -in @("2", "3")
+
+if ($shouldPush) {
+  Write-Host ""
+  Write-Host "Aliyun Container Registry config:" -ForegroundColor Yellow
+  Write-Host "  host      : $RegistryHost"
+  Write-Host "  namespace : $RegistryNamespace"
+  Write-Host "  repo rule : $RepositoryPrefix-<component>"
+  Write-Host "  example   : $RegistryHost/$RegistryNamespace/$RepositoryPrefix-aiservice:$version"
+  Write-Host "Note: if the target repository path does not exist yet, Aliyun usually creates it on first push." -ForegroundColor DarkYellow
+
+  $customRegistryHost = (Read-Host "Registry host (Press Enter to keep default)").Trim()
+  if (-not [string]::IsNullOrWhiteSpace($customRegistryHost)) {
+    $RegistryHost = $customRegistryHost
+  }
+
+  $customRegistryNamespace = (Read-Host "Registry namespace (Press Enter to keep default)").Trim()
+  if (-not [string]::IsNullOrWhiteSpace($customRegistryNamespace)) {
+    $RegistryNamespace = $customRegistryNamespace
+  }
+
+  $customRepositoryPrefix = (Read-Host "Repository prefix (Press Enter to keep default)").Trim()
+  if (-not [string]::IsNullOrWhiteSpace($customRepositoryPrefix)) {
+    $RepositoryPrefix = $customRepositoryPrefix
+  }
+}
+
+if ($shouldExport) {
+  New-Item -ItemType Directory -Force -Path $exportDir | Out-Null
+}
 
 foreach ($target in $targets) {
   switch ($target) {
@@ -85,26 +138,44 @@ foreach ($target in $targets) {
   }
 
   $versionTag = "$imageBase`:$version"
-  $latestTag = "$imageBase`:latest"
   $tarName = "$imageBase-$version.tar"
   $tarPath = Join-Path $exportDir $tarName
+  $remoteRepository = "$RegistryHost/$RegistryNamespace/$RepositoryPrefix-$target"
+  $remoteVersionTag = "$remoteRepository`:$version"
 
   Info "Building $target image..."
   Push-Location $contextDir
   try {
-    Invoke-DockerCommand -Args @("build", "-t", $versionTag, "-t", $latestTag, ".")
+    Invoke-DockerCommand -Args @("build", "-t", $versionTag, ".")
   } finally {
     Pop-Location
   }
 
-  Info "Exporting image to $tarPath"
-  Invoke-DockerCommand -Args @("save", "-o", $tarPath, $versionTag)
+  if ($shouldExport) {
+    Info "Exporting image to $tarPath"
+    Invoke-DockerCommand -Args @("save", "-o", $tarPath, $versionTag)
+  }
+
+  if ($shouldPush) {
+    Info "Tagging Aliyun image: $remoteVersionTag"
+    Invoke-DockerCommand -Args @("tag", $versionTag, $remoteVersionTag)
+
+    Info "Pushing Aliyun image: $remoteVersionTag"
+    Invoke-DockerCommand -Args @("push", $remoteVersionTag)
+  }
 
   Success "$target done: $versionTag"
-  Write-Host "      tar: $tarPath"
+  if ($shouldExport) {
+    Write-Host "      tar: $tarPath"
+  }
+  if ($shouldPush) {
+    Write-Host "      aliyun: $remoteVersionTag"
+  }
 }
 
 Write-Host ""
 Success "All selected targets completed."
-Write-Host "Export directory: $exportDir"
+if ($shouldExport) {
+  Write-Host "Export directory: $exportDir"
+}
 [void](Read-Host "Press Enter to exit")

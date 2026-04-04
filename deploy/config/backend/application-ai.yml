@@ -1,8 +1,0 @@
-app:
-  ai:
-    session-max-user-messages: ${AI_SESSION_MAX_USER_MESSAGES:5}
-    provider: ${AI_PROVIDER:aiservice}
-
-    ai-service:
-      base-url: ${AI_SERVICE_BASE_URL:http://pet-aiservice:8001}
-      model-name: ${AI_SERVICE_MODEL_NAME:aiservice}

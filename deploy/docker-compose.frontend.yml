@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   frontend:
     image: ${FRONTEND_IMAGE:-pet-frontend:latest}
@@ -14,6 +12,13 @@ services:
     volumes:
       - ${UPLOADS_DIR:-/srv/pet/uploads}:/data/uploads:ro
       - ./config/frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    healthcheck:
+      # 前端容器本质是 Nginx 静态站点，直接探测首页即可确认服务是否已经对外提供 HTTP 响应。
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     networks:
       - pet-network
     restart: unless-stopped

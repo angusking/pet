@@ -37,7 +37,7 @@ class ChatOrchestrator:
         self,
         settings: Settings,
         memory_provider: MemoryProvider,
-        rag_service: RagService,
+        rag_service: RagService | None,
     ) -> None:
         self._settings = settings
         self._memory_service = MemoryService(
@@ -69,6 +69,15 @@ class ChatOrchestrator:
         self._tool_service = ToolService(settings=settings)
         self._safety_service = SafetyService()
 
+    def set_rag_service(self, rag_service: RagService | None) -> None:
+        """在运行中替换当前编排器持有的 RAG 服务。
+
+        这样管理接口在后续启用或重载 RAG 时，不需要重建整个聊天编排器，
+        只需要把新的检索能力注入进来即可。
+        """
+
+        self._rag_service = rag_service
+
     async def handle(self, request: ChatRequest) -> ChatResponse:
         """执行完整的聊天处理流程。"""
         started = perf_counter()
@@ -94,7 +103,7 @@ class ChatOrchestrator:
             used_rewrite = rewrite_result.normalizedQuestion != request.message
 
             rag_context = None
-            if rewrite_result.needKnowledgeRetrieval:
+            if rewrite_result.needKnowledgeRetrieval and self._rag_service is not None:
                 rag_context = await self._rag_service.retrieve(rewrite_result.normalizedQuestion)
                 used_rag = bool(rag_context)
 

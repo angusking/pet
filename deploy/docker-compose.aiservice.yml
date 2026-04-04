@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   aiservice:
     image: ${AISERVICE_IMAGE:-pet-aiservice:latest}
@@ -7,17 +5,22 @@ services:
     env_file:
       - ./env/aiservice.env
     environment:
+      # 仅保留容器时区这类宿主级参数。
+      # AIService 业务配置统一从 env_file 读取，避免与 environment 重复后产生覆盖歧义。
       TZ: Asia/Shanghai
-      APP_ENV: ${APP_ENV:-prod}
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8001
-      REDIS_HOST: ${REDIS_HOST:-pet-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      AI_LOG_DIR: /app/AIlog
     ports:
       - "8001:8001"
     volumes:
       - ${AI_LOG_DIR:-/srv/pet/AIlog}:/app/AIlog
+      - ${RAG_DATA_DIR:-/srv/pet/aiservice/data}:/app/data
+    healthcheck:
+      # AIService 启动时会初始化 Redis、RAG 与知识库加载，冷启动时间明显长于普通 Web 服务，
+      # 因此这里放宽探测窗口，避免服务尚未监听端口时就被判定为异常。
+      test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5); sys.exit(0 if r.status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
     networks:
       - pet-network
     restart: unless-stopped

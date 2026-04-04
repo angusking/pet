@@ -14,11 +14,6 @@ from ai_service.rag.exceptions import IndexBuildError
 
 logger = get_logger(__name__)
 
-try:
-    from sentence_transformers import SentenceTransformer
-except Exception:  # pragma: no cover - 运行时缺依赖时走清晰报错即可
-    SentenceTransformer = None  # type: ignore[assignment]
-
 
 class LocalEmbeddingProvider:
     """本地 embedding 提供者。
@@ -80,10 +75,16 @@ class LocalEmbeddingProvider:
 
         if self._model is not None:
             return self._model
-        if SentenceTransformer is None:
+
+        # 这里把 sentence-transformers 的导入也延迟到真正需要 embedding 的时刻。
+        # 否则即使 RAG 已关闭，只要模块被 import，就可能把 torch 等大依赖提前拉进内存，
+        # 在 2G 机器上非常容易触发 OOM。
+        try:
+            from sentence_transformers import SentenceTransformer
+        except Exception as exc:  # pragma: no cover - 运行时缺依赖时走清晰报错即可
             raise IndexBuildError(
                 "未安装 sentence-transformers，无法加载本地 embedding 模型。"
-            )
+            ) from exc
 
         model_name = self.model_name()
         logger.info("load local embedding model, model=%s", model_name)

@@ -2,10 +2,8 @@ server:
   port: 8080
 
 spring:
-  config:
-    import: optional:file:/app/config/application-ai.yml
   datasource:
-    url: ${DB_URL:jdbc:mysql://mysql:3306/pet_demo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    url: ${DB_URL:jdbc:mysql://pet-mysql:3306/pet_demo?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${DB_USER:pet}
     password: ${DB_PASSWORD:pet123}
   jackson:
@@ -40,8 +38,13 @@ app:
     secret: ${JWT_SECRET:change-me-to-a-32-byte-secret-key}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
   upload:
-    # 该目录在 docker-compose 中映射到宿主机（建议 /srv/pet/uploads）
+    # 该目录在 docker-compose 中映射到宿主机，容器内统一从 /app/uploads 读取。
     base-dir: ${UPLOAD_BASE_DIR:/app/uploads}
     public-base: /uploads
   ai:
-    provider: ${AI_PROVIDER:mock}
+    # 与 backend 主工程保持一致，AI 相关配置直接回收到单一配置文件中。
+    session-max-user-messages: ${AI_SESSION_MAX_USER_MESSAGES:5}
+    provider: ${AI_PROVIDER:aiservice}
+    ai-service:
+      base-url: ${AI_SERVICE_BASE_URL:http://pet-aiservice:8001}
+      model-name: ${AI_SERVICE_MODEL_NAME:aiservice}

@@ -53,31 +53,40 @@ async def lifespan(app: FastAPI):
     memory_provider = RedisMemoryProvider(settings)
     await memory_provider.connect()
 
-    knowledge_manager = KnowledgeManager(settings=settings)
-    embedding_provider = LocalEmbeddingProvider(settings=settings)
-    retriever = FaissRetriever(
-        knowledge_manager=knowledge_manager,
-        embedding_provider=embedding_provider,
-    )
-    index_builder = IndexBuilder(
-        knowledge_manager=knowledge_manager,
-        embedding_provider=embedding_provider,
-    )
-    rag_service = RagService(
-        retriever=retriever,
-        top_k=settings.rag_top_k,
-        enabled=settings.rag_enabled,
-    )
+    knowledge_manager = None
+    index_builder = None
+    rag_service = None
 
-    if settings.rag_enabled and settings.rag_auto_load_on_start:
-        try:
-            loaded_version = retriever.load_active()
-            if loaded_version:
-                logger.info("RAG active version loaded on startup, version=%s", loaded_version)
-            else:
-                logger.info("RAG has no active version on startup")
-        except Exception as exc:
-            logger.warning("RAG auto load failed on startup, error=%s", exc)
+    # 只有显式开启 RAG 时，才初始化知识库、向量检索和索引构建相关组件。
+    # 这样在排障或轻量部署场景下，RAG 关闭后不会再被 embedding / FAISS 初始化阻塞启动。
+    if settings.rag_enabled:
+        knowledge_manager = KnowledgeManager(settings=settings)
+        embedding_provider = LocalEmbeddingProvider(settings=settings)
+        retriever = FaissRetriever(
+            knowledge_manager=knowledge_manager,
+            embedding_provider=embedding_provider,
+        )
+        index_builder = IndexBuilder(
+            knowledge_manager=knowledge_manager,
+            embedding_provider=embedding_provider,
+        )
+        rag_service = RagService(
+            retriever=retriever,
+            top_k=settings.rag_top_k,
+            enabled=True,
+        )
+
+        if settings.rag_auto_load_on_start:
+            try:
+                loaded_version = retriever.load_active()
+                if loaded_version:
+                    logger.info("RAG active version loaded on startup, version=%s", loaded_version)
+                else:
+                    logger.info("RAG has no active version on startup")
+            except Exception as exc:
+                logger.warning("RAG auto load failed on startup, error=%s", exc)
+    else:
+        logger.info("RAG disabled by configuration, skip retriever initialization")
 
     orchestrator = ChatOrchestrator(
         settings=settings,

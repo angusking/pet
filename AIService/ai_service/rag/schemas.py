@@ -123,6 +123,24 @@ class CurrentVersionResponse(BaseModel):
     status: str = Field(default="empty", description="当前状态，例如 ready / empty / broken。")
 
 
+class EnableRagRequest(BaseModel):
+    """运行时启用并加载 RAG 的接口入参。"""
+
+    version: str | None = Field(
+        default=None,
+        description="可选的目标版本；为空时优先加载当前 active 版本。",
+    )
+
+
+class EnableRagResponse(BaseModel):
+    """运行时启用并加载 RAG 的接口返回。"""
+
+    status: str = Field(default="ok", description="接口调用结果。")
+    active_version: str | None = Field(default=None, description="当前 active_kb.json 中记录的版本。")
+    loaded_version: str | None = Field(default=None, description="本次实际加载到内存的版本。")
+    message: str = Field(default="", description="结果说明。")
+
+
 class RetrievedChunk(BaseModel):
     """单条检索结果。"""
 
@@ -141,4 +159,3 @@ class RetrievedChunk(BaseModel):
     subtopic_title: str = Field(default="", description="子主题标题。")
     quality_score: float | None = Field(default=None, description="切块质量分。")
     metadata: dict[str, Any] = Field(default_factory=dict, description="扩展元数据。")
-

@@ -23,6 +23,7 @@ import com.pet.entity.PetEntity;
 import com.pet.repository.AiChatMessageRepository;
 import com.pet.repository.AiChatSessionRepository;
 import com.pet.repository.PetRepository;
+import com.pet.service.ai.AiConversationMemoryCleaner;
 import com.pet.service.ai.AiProvider;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -53,6 +54,9 @@ class AiChatServiceTest {
 
   @Mock
   private AiProperties aiProperties;
+
+  @Mock
+  private AiConversationMemoryCleaner aiConversationMemoryCleaner;
 
   @InjectMocks
   private AiChatService aiChatService;
@@ -93,7 +97,12 @@ class AiChatServiceTest {
     when(aiChatMessageRepository.findBySessionIdOrderByCreatedAtDescIdDesc(eq(33L), any(Pageable.class)))
         .thenReturn(List.of(message(11L, 33L, 1L, 8L, "user", "我家狗狗拉稀", LocalDateTime.now()), previousAssistant));
     when(aiProvider.generateReply(any(AiProvider.AiRequest.class)))
-        .thenReturn(new AiProvider.AiReply("{\"summary\":\"ok\"}", "aiservice", 123, "trace-1"));
+        .thenReturn(new AiProvider.AiReply(
+            "这是结构化回答的正文",
+            "{\"answer\":\"这是结构化回答的正文\",\"riskLevel\":\"low\",\"checklist\":[],\"services\":[],\"followUps\":[],\"followUpQuestions\":[],\"actionCards\":[],\"disclaimer\":\"仅供参考\"}",
+            "aiservice",
+            123,
+            "trace-1"));
     when(aiChatMessageRepository.save(any(AiChatMessageEntity.class)))
         .thenAnswer(invocation -> {
           AiChatMessageEntity entity = invocation.getArgument(0);
@@ -108,7 +117,7 @@ class AiChatServiceTest {
 
     assertEquals(201L, response.userMessage().id());
     assertEquals(202L, response.assistantMessage().id());
-    assertEquals("{\"summary\":\"ok\"}", response.assistantMessage().content());
+    assertEquals("这是结构化回答的正文", response.assistantMessage().content());
     assertEquals("我家狗狗拉稀", response.session().title());
 
     ArgumentCaptor<AiProvider.AiRequest> requestCaptor = ArgumentCaptor.forClass(AiProvider.AiRequest.class);
