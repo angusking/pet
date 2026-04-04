@@ -24,7 +24,6 @@
 - `env/backend.env`
 - `env/frontend.env`
 - `config/backend/application.yml`
-- `config/backend/application-ai.yml`
 - `config/frontend/nginx.conf`
 - `build-export-image.ps1`
 
@@ -92,6 +91,12 @@ docker network create pet-network
 - `BACKEND_UPSTREAM`
 
 建议每次发版只改镜像 tag，其余路径类变量保持稳定。
+
+当前推荐在这里直接维护镜像地址，例如：
+
+- `AISERVICE_IMAGE=crpi-xxx-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-aiservice:v0.2.1`
+- `BACKEND_IMAGE=crpi-xxx-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-backend:v0.2.1`
+- `FRONTEND_IMAGE=crpi-xxx-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-frontend:v0.2.1`
 
 ### 4.2 AIService 环境（`deploy/env/aiservice.env`）
 
@@ -167,6 +172,26 @@ Prompt 与 Tool：
 - 本地版本化 RAG
 
 这意味着生产配置不能再只提供单个 `SYSTEM_PROMPT_FILE`，必须与当前分层 Prompt 结构保持一致。
+
+### 5.1.1 当前线上 RAG 状态
+
+当前线上服务器内存较小，开启本地 RAG 后容易触发 OOM，导致 `pet-aiservice` 容器被系统杀掉。
+
+因此当前线上默认策略是：
+
+- `AIService` 正常启用
+- 基础对话、Question Rewrite、Tool 路由正常启用
+- **RAG 默认关闭**
+
+当前线上建议配置：
+
+- `RAG_ENABLED=false`
+
+补充说明：
+
+- 代码仍保留 RAG 能力
+- 当前服务已支持在启动后通过管理接口手动加载 RAG
+- 但在现有服务器资源下，不建议线上长期启用 RAG
 
 ### 5.2 AIService 日志目录
 
@@ -274,7 +299,10 @@ docker save -o pet-frontend-v1.tar pet-frontend:v1
 
 说明：
 
-- 该脚本只负责镜像导出
+- 该脚本现在支持两类动作：
+  - 导出 tar
+  - 推送阿里云镜像仓库
+- 脚本当前只按输入的版本号构建和推送，不再额外推 `latest`
 - 不负责同步宿主机 `RAG_DATA_DIR` 中的知识库和索引数据
 - 如果本次版本需要预置知识库，需额外同步 `${RAG_DATA_DIR}` 或在服务器上执行 `/kb/rebuild` 与 `/kb/switch`
 
@@ -292,7 +320,33 @@ docker load -i /srv/pet/pet-frontend-v1.tar
 - `BACKEND_IMAGE=pet-backend:v1`
 - `FRONTEND_IMAGE=pet-frontend:v1`
 
+## 10.1 通过阿里云镜像仓库发布
+
+如果使用阿里云个人版镜像仓库，推荐直接在 `deploy/.env` 中维护完整镜像地址。
+
+示例：
+
+```env
+AISERVICE_IMAGE=crpi-hj866eohic2eueoi-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-aiservice:v0.2.1
+BACKEND_IMAGE=crpi-hj866eohic2eueoi-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-backend:v0.2.1
+FRONTEND_IMAGE=crpi-hj866eohic2eueoi-vpc.cn-beijing.personal.cr.aliyuncs.com/gj_pet/pet-frontend:v0.2.1
+```
+
+然后在服务器执行：
+
+```bash
+docker compose -f docker-compose.aiservice.yml pull
+docker compose -f docker-compose.backend.yml pull
+docker compose -f docker-compose.frontend.yml pull
+
+docker compose -f docker-compose.aiservice.yml up -d
+docker compose -f docker-compose.backend.yml up -d
+docker compose -f docker-compose.frontend.yml up -d
+```
+
 ## 11. RAG 知识库发布流程
+
+说明：当前线上默认不启用 RAG。以下流程更适合本地环境、测试环境，或已升级内存资源后的服务器环境。
 
 如果本次发版涉及知识库更新，建议按以下流程执行：
 
@@ -304,6 +358,8 @@ docker load -i /srv/pet/pet-frontend-v1.tar
    - `POST /kb/switch`
 4. 校验：
    - `GET /kb/current`
+5. 如果服务最初以 `RAG_ENABLED=false` 启动，额外调用：
+   - `POST /kb/enable`
 
 示例：
 
@@ -315,6 +371,10 @@ curl -X POST http://127.0.0.1:8001/kb/rebuild \
 curl -X POST http://127.0.0.1:8001/kb/switch \
   -H 'Content-Type: application/json' \
   -d '{"version":"v0402"}'
+
+curl -X POST http://127.0.0.1:8001/kb/enable \
+  -H 'Content-Type: application/json' \
+  -d '{}'
 
 curl http://127.0.0.1:8001/kb/current
 ```
@@ -378,6 +438,8 @@ curl http://127.0.0.1:8001/kb/current
 ls -l /srv/pet/aiservice/data
 ```
 
+如果线上当前就是按低内存模式运行，`loaded_version` 为空是预期结果。
+
 ## 13. 常见问题排查
 
 ### 13.1 后端启动报 `no main manifest attribute`
@@ -396,10 +458,29 @@ ls -l /srv/pet/aiservice/data
 
 检查：
 
-- `RAG_ENABLED=true`
+- 当前服务器是否本来就按低内存策略设置了 `RAG_ENABLED=false`
+- 如果当前环境确实需要 RAG：
+  - `RAG_ENABLED=true`，或服务启动后手动调用 `POST /kb/enable`
 - `/app/data` 是否已正确挂载
 - `GET /kb/current` 是否存在已激活版本
 - `AIlog` 中是否有检索或加载失败日志
+
+### 13.3.1 AIService 容器反复重启并出现 OOM
+
+如果 `docker events` 或 `dmesg` 中出现：
+
+- `exitCode=137`
+- `Out of memory`
+- `Killed process ... python`
+
+通常说明服务器内存不足。
+
+当前处理建议：
+
+- 先设置 `RAG_ENABLED=false`
+- 保持 AI 基础对话链路运行
+- 暂不在该服务器默认开启 RAG
+- 如需长期启用 RAG，优先升级服务器内存或拆分独立高内存服务
 
 ### 13.4 上传报 `too large` / `413`
 
